@@ -1,0 +1,23 @@
+{
+  "resources": [
+    {
+      "id": 1,
+      "title": "Stress Management",
+      "description": "Learn how to manage stress",
+      "category": "Stress"
+    },
+    {
+      "id": 2,
+      "title": "Mindfulness",
+      "description": "Practice mindfulness techniques",
+      "category": "Mindfulness"
+    },
+    {
+      "id": 3,
+      "title": "Self-Care",
+      "description": "Tips for taking care of yourself",
+      "category": "Wellness"
+    }
+  ],
+  "categories": ["All", "Stress", "Mindfulness", "Wellness"]
+}
