@@ -54,7 +54,17 @@
     
     <!-- admin-only section for adding new resources -->
     <div v-if="authService.isAdmin()" class="admin-section">
-      <h2>Admin: Add New Resource</h2>
+      <div class="admin-header">
+        <h2>Admin: Add New Resource</h2>
+        <div class="admin-export-buttons">
+          <button @click="exportResourcesCSV" class="export-btn" aria-label="Export resources data as CSV file">
+            Export Resources (CSV)
+          </button>
+          <button @click="exportResourcesPDF" class="export-btn" aria-label="Export resources data as PDF file">
+            Export Resources (PDF)
+          </button>
+        </div>
+      </div>
       <form @submit.prevent="addResource" class="admin-form">
         <div class="form-group">
           <label for="new-resource-title">Title:</label>
@@ -181,6 +191,7 @@ import { ref, computed, onMounted } from 'vue'
 import mentalHealthData from '../data/mentalHealthData.json'
 import { authService as localAuth } from '../services/auth'
 import { firebaseAuthService } from '../services/firebaseAuth'
+import { exportService } from '../services/exportService'
 import { sanitizeInput, validateAndSanitize, getSafeErrorMessage } from '../utils/security'
 import reviewService from '../services/reviewService'
 
@@ -428,6 +439,52 @@ export default {
       return resource ? resource.title : ''
     }
     
+    /**
+     * export resources data to CSV format
+     * uses export service to generate downloadable CSV file
+     * includes all mental health resource information
+     */
+    const exportResourcesCSV = () => {
+      try {
+        const success = exportService.exportResources(resources.value)
+        if (success) {
+          console.log('Resources exported to CSV successfully')
+        } else {
+          console.error('Failed to export resources to CSV')
+        }
+      } catch (error) {
+        console.error('CSV export error:', error)
+      }
+    }
+    
+    /**
+     * export resources data to PDF format
+     * uses export service to generate downloadable PDF file
+     * provides formatted table view for documentation
+     */
+    const exportResourcesPDF = () => {
+      try {
+        const columns = [
+          { key: 'id', label: 'ID' },
+          { key: 'title', label: 'Title' },
+          { key: 'description', label: 'Description' },
+          { key: 'category', label: 'Category' }
+        ]
+        
+        const timestamp = new Date().toISOString().split('T')[0]
+        const filename = `resources_export_${timestamp}.pdf`
+        
+        const success = exportService.exportToPDF(resources.value, columns, filename)
+        if (success) {
+          console.log('Resources exported to PDF successfully')
+        } else {
+          console.error('Failed to export resources to PDF')
+        }
+      } catch (error) {
+        console.error('PDF export error:', error)
+      }
+    }
+    
     // this function gets the description of the selected resource
     const getSelectedResourceDescription = () => {
       if (!selectedResourceForRating.value) return ''
@@ -502,6 +559,8 @@ export default {
       ratingRefreshTrigger,
       getSelectedResourceTitle,
       getSelectedResourceDescription,
+      exportResourcesCSV,
+      exportResourcesPDF,
       setCurrentRating,
       submitRating
     }
@@ -708,6 +767,30 @@ export default {
   text-align: center;
   padding: 1rem;
   color: #333;
+}
+
+.admin-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.admin-export-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.export-btn {
+  background-color: #28a745;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+}
+
+.export-btn:hover {
+  background-color: #218838;
 }
 
 @media (max-width: 768px) {

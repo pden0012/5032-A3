@@ -35,7 +35,12 @@
           >
             {{ registrationEnabled ? 'Disable' : 'Enable' }} Registration
           </button>
-          <button @click="exportUsers" class="export-btn">Export Users</button>
+          <button @click="exportUsersCSV" class="export-btn" aria-label="Export users data as CSV file">
+            Export Users (CSV)
+          </button>
+          <button @click="exportUsersPDF" class="export-btn" aria-label="Export users data as PDF file">
+            Export Users (PDF)
+          </button>
           <button @click="clearAllData" class="danger-btn">Clear All Data</button>
           <button @click="resetToDefaults" class="reset-btn">Reset to Defaults</button>
         </div>
@@ -131,6 +136,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { authService } from '../services/auth'
 import { emailService } from '../services/emailService'
+import { exportService } from '../services/exportService'
 
 export default {
   name: 'AdminPanel',
@@ -200,20 +206,39 @@ export default {
      * Generates timestamped filename for easy identification.
      * Triggers browser download with user data export.
      */
-    const exportUsers = () => {
+    const exportUsersCSV = () => {
       try {
-        const dataStr = JSON.stringify(allUsers.value, null, 2)
-        const dataBlob = new Blob([dataStr], { type: 'application/json' })
-        const url = URL.createObjectURL(dataBlob)
-        const link = document.createElement('a')
-        link.href = url
-        link.download = `users-export-${new Date().toISOString().split('T')[0]}.json`
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
-        URL.revokeObjectURL(url)
+        const success = exportService.exportUsers(allUsers.value)
+        if (success) {
+          console.log('Users exported to CSV successfully')
+        } else {
+          console.error('Failed to export users to CSV')
+        }
       } catch (error) {
-        console.error('Error exporting users:', error)
+        console.error('CSV export error:', error)
+      }
+    }
+    
+    const exportUsersPDF = () => {
+      try {
+        const columns = [
+          { key: 'id', label: 'ID' },
+          { key: 'username', label: 'Username' },
+          { key: 'email', label: 'Email' },
+          { key: 'role', label: 'Role' }
+        ]
+        
+        const timestamp = new Date().toISOString().split('T')[0]
+        const filename = `users_export_${timestamp}.pdf`
+        
+        const success = exportService.exportToPDF(allUsers.value, columns, filename)
+        if (success) {
+          console.log('Users exported to PDF successfully')
+        } else {
+          console.error('Failed to export users to PDF')
+        }
+      } catch (error) {
+        console.error('PDF export error:', error)
       }
     }
     
@@ -335,7 +360,8 @@ export default {
       regularUsers,
       formatDate,
       toggleRegistration,
-      exportUsers,
+      exportUsersCSV,
+      exportUsersPDF,
       clearAllData,
       resetToDefaults,
       // Email functionality
