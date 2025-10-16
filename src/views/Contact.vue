@@ -6,11 +6,11 @@
       
       <div class="contact-form">
         <!-- status message display -->
-        <div v-if="statusMessage" :class="['status-message', statusMessage.success ? 'success' : 'error']">
+        <div v-if="statusMessage" :class="['status-message', statusMessage.success ? 'success' : 'error']" role="alert" aria-live="polite">
           {{ statusMessage.text }}
         </div>
         
-        <form @submit.prevent="sendMessage">
+        <form @submit.prevent="sendMessage" role="form" aria-label="Contact form">
           <div class="form-group">
             <label for="name">Name:</label>
             <input 

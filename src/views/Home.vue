@@ -10,6 +10,8 @@
         :key="category"
         @click="filterByCategory(category)"
         class="filter-btn"
+        :aria-pressed="selectedCategory === category"
+        :aria-label="`Filter by ${category}`"
       >
         {{ category }}
       </button>
@@ -23,17 +25,25 @@
         class="resource-card"
       >
       <!-- resource title -->
-        <h3 class="resource-title">{{ resource.title }}</h3>
+        <h2 class="resource-title">{{ resource.title }}</h2>
         <!-- resource description -->
         <p class="resource-description">{{ resource.description }}</p>
         <span class="resource-category">{{ resource.category }}</span>
         
     <!-- admin-only actions for resource management -->
         <div v-if="authService.isAdmin()" class="admin-actions">
-          <button class="admin-btn edit" @click="editResource(resource)">
+          <button 
+            class="admin-btn edit" 
+            @click="editResource(resource)"
+            :aria-label="`Edit resource: ${resource.title}`"
+          >
             Edit
           </button>
-          <button class="admin-btn delete" @click="deleteResource(resource)">
+          <button 
+            class="admin-btn delete" 
+            @click="deleteResource(resource)"
+            :aria-label="`Delete resource: ${resource.title}`"
+          >
             Delete
           </button>
         </div>
@@ -47,16 +57,16 @@
       <h2>Admin: Add New Resource</h2>
       <form @submit.prevent="addResource" class="admin-form">
         <div class="form-group">
-          <label>Title:</label>
-          <input type="text" v-model="newResource.title" required>
+          <label for="new-resource-title">Title:</label>
+          <input type="text" id="new-resource-title" v-model="newResource.title" required>
         </div>
         <div class="form-group">
-          <label>Description:</label>
-          <textarea v-model="newResource.description" required></textarea>
+          <label for="new-resource-description">Description:</label>
+          <textarea id="new-resource-description" v-model="newResource.description" required></textarea>
         </div>
         <div class="form-group">
-          <label>Category:</label>
-          <select v-model="newResource.category" required>
+          <label for="new-resource-category">Category:</label>
+          <select id="new-resource-category" v-model="newResource.category" required>
             <option value="">Select Category</option>
             <option v-for="category in categories" :key="category" :value="category">
               {{ category }}
@@ -86,7 +96,7 @@
         <!-- rating display for selected resource -->
         <div v-if="selectedResourceForRating" class="selected-resource-rating">
           <div class="resource-info">
-            <h3>{{ getSelectedResourceTitle() }}</h3>
+            <h2>{{ getSelectedResourceTitle() }}</h2>
             <p>{{ getSelectedResourceDescription() }}</p>
           </div>
           
@@ -538,7 +548,7 @@ export default {
 }
 
 .resource-description {
-  color: #666;
+  color: #333;
   margin-bottom: 1rem;
 }
 
@@ -646,7 +656,7 @@ export default {
 
 .star {
   font-size: 1.2rem;
-  color: #ddd;
+  color: #666;
 }
 
 .star.filled {
@@ -667,7 +677,7 @@ export default {
 
 .star-input {
   font-size: 2rem;
-  color: #ddd;
+  color: #666;
   cursor: pointer;
 }
 
@@ -697,7 +707,7 @@ export default {
 .no-selection-prompt {
   text-align: center;
   padding: 1rem;
-  color: #666;
+  color: #333;
 }
 
 @media (max-width: 768px) {

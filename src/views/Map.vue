@@ -3,27 +3,36 @@
     <h1>Mental Health Resources Map</h1>
     
     <!-- map controls with search and navigation -->
-    <div class="map-controls">
+    <div class="map-controls" role="region" aria-label="Map search and navigation controls">
       <div class="search-section">
         <input 
           v-model="searchQuery" 
           @keyup.enter="searchPlacesOfInterest"
           placeholder="Search places of interest..."
           class="search-input"
+          aria-label="Search for places of interest"
+          aria-describedby="search-instructions"
         />
-        <button @click="searchPlacesOfInterest" class="search-btn">Search</button>
+        <button @click="searchPlacesOfInterest" class="search-btn" aria-label="Search for the entered location">
+          Search
+        </button>
       </div>
       <div class="control-buttons">
-        <button @click="getCurrentLocation" class="control-btn location-btn">
+        <button @click="getCurrentLocation" class="control-btn location-btn" aria-label="Get my current location">
           My Location
         </button>
-        <button @click="navigateBetweenPlaces" class="control-btn navigate-btn">
+        <button @click="navigateBetweenPlaces" class="control-btn navigate-btn" aria-label="Show navigation routes between markers">
           Navigate
         </button>
-        <button @click="clearMarkers" class="control-btn clear-btn">
+        <button @click="clearMarkers" class="control-btn clear-btn" aria-label="Clear all markers and routes">
           Clear All
         </button>
       </div>
+    </div>
+    
+    <!-- search instructions for screen readers -->
+    <div id="search-instructions" class="sr-only">
+      Search for places of interest like landmarks, tourist attractions, or mental health facilities. Press Enter or click Search to find locations on the map.
     </div>
     
     <!-- mapbox map container -->
@@ -511,6 +520,19 @@ export default {
   max-width: 1000px;
   margin: 0 auto;
   padding: 1rem;
+}
+
+/* screen reader only text */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .map-controls {

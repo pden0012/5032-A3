@@ -1,12 +1,21 @@
 <template>
   <div id="app">
+    <!-- skip navigation link for screen readers -->
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+    
     <!-- main navigation bar here -->
-    <nav class="navbar">
+    <nav class="navbar" role="navigation" aria-label="Main navigation">
       <div class="nav-brand">Youth Mental Health</div>
-      <button class="mobile-menu-toggle" @click="toggleMobileMenu" :class="{ active: mobileMenuOpen }">
-        <span></span>
-        <span></span>
-        <span></span>
+      <button 
+        class="mobile-menu-toggle" 
+        @click="toggleMobileMenu" 
+        :class="{ active: mobileMenuOpen }"
+        :aria-expanded="mobileMenuOpen"
+        aria-label="Toggle mobile menu"
+      >
+        <span aria-hidden="true"></span>
+        <span aria-hidden="true"></span>
+        <span aria-hidden="true"></span>
       </button>
       <div class="nav-links" :class="{ active: mobileMenuOpen }">
         <a href="#" @click.prevent="navigateTo('/')">Home</a>
@@ -39,7 +48,7 @@
     </nav>
     
     <!-- main content area -->
-    <main class="main-content">
+    <main id="main-content" class="main-content" role="main" tabindex="-1">
       <router-view />
     </main>
     
@@ -208,6 +217,29 @@ export default {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+}
+
+/* skip link for accessibility */
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 6px;
+  background: #000;
+  color: #fff;
+  padding: 8px;
+  text-decoration: none;
+  z-index: 1000;
+  border-radius: 4px;
+}
+
+.skip-link:focus {
+  top: 6px;
+}
+
+/* focus indicators for keyboard navigation */
+*:focus {
+  outline: 2px solid #007bff;
+  outline-offset: 2px;
 }
 
 body {

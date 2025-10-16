@@ -5,12 +5,13 @@
       <input 
         v-model="globalQuery" 
         placeholder="Search all columns..." 
+        aria-label="Search all columns"
       />
     </div>
     
     <!-- data table with sorting and column search -->
     <div class="table-container">
-      <table class="table">
+      <table class="table" role="table" aria-label="Data table">
         <thead>
           <tr>
             <th 
@@ -18,6 +19,11 @@
               :key="col.key"
               :class="{ 'th-sort': true }"
               @click="toggleSort(col.key)"
+              :aria-sort="sort.key === col.key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'"
+              role="columnheader"
+              tabindex="0"
+              @keyup.enter="toggleSort(col.key)"
+              @keyup.space.prevent="toggleSort(col.key)"
             >
               {{ col.label }}
               <span v-if="sort.key === col.key">
@@ -30,6 +36,7 @@
               <input 
                 v-model="columnQueries[col.key]" 
                 :placeholder="`Search ${col.label.toLowerCase()}...`"
+                :aria-label="`Search ${col.label} column`"
               />
             </th>
           </tr>
