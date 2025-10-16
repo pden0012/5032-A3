@@ -66,6 +66,19 @@
         <div v-if="errors.confirmPassword" class="error-text">{{ errors.confirmPassword }}</div>
       </div>
       
+      <!-- Role Selection -->
+      <div class="form-group">
+        <label for="role">Account Type:</label>
+        <select id="role" v-model="selectedRole" required>
+          <option value="user">Regular User</option>
+          <option value="admin">Administrator</option>
+        </select>
+        <div class="role-description">
+          <small v-if="selectedRole === 'user'">Access to resources and basic features</small>
+          <small v-if="selectedRole === 'admin'">Full access to admin panel and system management</small>
+        </div>
+      </div>
+      
       <button type="submit" :disabled="isLoading || !isFormValid">
         {{ isLoading ? 'Creating Account...' : 'Register' }}
       </button>
@@ -114,6 +127,7 @@ const username = ref('')
 const email = ref('')
 const password = ref('')
 const confirmPassword = ref('')
+const selectedRole = ref('user')
 
 /**
  * loading state indicator for registration process
@@ -274,7 +288,21 @@ const handleRegister = async () => {
     const user = await firebaseAuthService.registerWithEmail(sanitizedEmail, sanitizedPassword)
     
     if (user) {
-      successMessage.value = 'Account created successfully!'
+      // save user role information to localStorage
+      const userData = {
+        id: Date.now(),
+        username: sanitizedUsername,
+        email: sanitizedEmail,
+        role: selectedRole.value,
+        createdAt: new Date().toISOString()
+      }
+      
+      // get existing users or create new array
+      const existingUsers = JSON.parse(localStorage.getItem('users') || '[]')
+      existingUsers.push(userData)
+      localStorage.setItem('users', JSON.stringify(existingUsers))
+      
+      successMessage.value = `Account created successfully as ${selectedRole.value}!`
       
       // redirect to home page after successful registration
       setTimeout(() => {
@@ -341,6 +369,7 @@ export default {
       email,
       password,
       confirmPassword,
+      selectedRole,
       isLoading,
       errorMessage,
       successMessage,
@@ -443,5 +472,17 @@ button:disabled {
   text-align: center;
   margin: 1rem 0;
   color: #333;
+}
+
+.role-description {
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+  color: #666;
+}
+
+.role-description small {
+  font-style: italic;
 }
 </style>
