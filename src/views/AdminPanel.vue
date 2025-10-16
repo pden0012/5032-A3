@@ -11,15 +11,15 @@
         <h2>User Statistics</h2>
         <div class="user-stats">
           <div class="stat-card">
-            <h3>{{ totalUsers }}</h3>
+            <div class="stat-number">{{ totalUsers }}</div>
             <p>Total Users</p>
           </div>
           <div class="stat-card">
-            <h3>{{ adminUsers }}</h3>
+            <div class="stat-number">{{ adminUsers }}</div>
             <p>Admin Users</p>
           </div>
           <div class="stat-card">
-            <h3>{{ regularUsers }}</h3>
+            <div class="stat-number">{{ regularUsers }}</div>
             <p>Regular Users</p>
           </div>
         </div>
@@ -390,10 +390,11 @@ export default {
   border: 1px solid #ddd;
 }
 
-.stat-card h3 {
+.stat-number {
   font-size: 2rem;
   margin-bottom: 0.5rem;
   color: #007bff;
+  font-weight: bold;
 }
 
 .admin-controls {

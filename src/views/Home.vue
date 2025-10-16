@@ -656,7 +656,7 @@ export default {
 
 .star {
   font-size: 1.2rem;
-  color: #666;
+  color: #333;
 }
 
 .star.filled {
@@ -677,7 +677,7 @@ export default {
 
 .star-input {
   font-size: 2rem;
-  color: #666;
+  color: #333;
   cursor: pointer;
 }
 

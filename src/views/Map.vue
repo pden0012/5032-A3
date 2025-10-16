@@ -40,7 +40,7 @@
     
     <!-- markers list showing coordinates and remove options -->
     <div v-if="markers.length > 0" class="markers-list">
-      <h3>Markers ({{ markers.length }})</h3>
+      <h2>Markers ({{ markers.length }})</h2>
       <div v-for="(marker, index) in markers" :key="index" class="marker-item">
         <span class="marker-number">{{ index + 1 }}</span>
         <span class="marker-coords">
@@ -52,7 +52,7 @@
     
     <!-- usage instructions for map features -->
     <div class="instructions">
-      <h3>Instructions</h3>
+      <h2>Instructions</h2>
       <p>• Search for places of interest using the search box</p>
       <p>• Click "Navigate" to show routes between markers</p>
       <p>• Click "My Location" to get your current position</p>
@@ -166,7 +166,7 @@ export default {
       map.value.on('error', (e) => {
         console.warn('Mapbox error:', e)
         // fallback: show simple message if map fails to load
-        document.getElementById('map').innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;background:#f8f9fa;color:#666;"><div><h3>Map Loading...</h3><p>If map doesn\'t appear, try refreshing the page</p></div></div>'
+        document.getElementById('map').innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;background:#f8f9fa;color:#333;"><div><h2>Map Loading...</h2><p>If map doesn\'t appear, try refreshing the page</p></div></div>'
       })
     }
     

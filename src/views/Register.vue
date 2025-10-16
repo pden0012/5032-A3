@@ -442,6 +442,6 @@ button:disabled {
 .form-divider {
   text-align: center;
   margin: 1rem 0;
-  color: #666;
+  color: #333;
 }
 </style>
