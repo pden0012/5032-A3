@@ -75,7 +75,7 @@
       <div class="rating-controls">
         <div class="resource-selector">
           <label for="resourceSelect">Select Resource to Rate:</label>
-          <select id="resourceSelect" v-model="selectedResourceForRating" class="resource-dropdown">
+          <select id="resourceSelect" v-model.number="selectedResourceForRating" class="resource-dropdown">
             <option value="">Choose a resource...</option>
             <option v-for="resource in resources" :key="resource.id" :value="resource.id">
               {{ resource.title }} ({{ resource.category }})
@@ -169,8 +169,10 @@
 <script>
 import { ref, computed, onMounted } from 'vue'
 import mentalHealthData from '../data/mentalHealthData.json'
-import { authService } from '../services/auth'
+import { authService as localAuth } from '../services/auth'
+import { firebaseAuthService } from '../services/firebaseAuth'
 import { sanitizeInput, validateAndSanitize, getSafeErrorMessage } from '../utils/security'
+import reviewService from '../services/reviewService'
 
 // home page component with dynamic data and role-based features
 export default {
@@ -191,7 +193,7 @@ export default {
     const ratings = ref({})
     
     // selected resource for rating and current rating input
-    const selectedResourceForRating = ref('')
+    const selectedResourceForRating = ref(null)
     const currentRating = ref(0)
     
     // force refresh trigger for rating display
@@ -429,36 +431,46 @@ export default {
     }
     
     // this function submits the rating for the selected resource
-    const submitRating = () => {
+    const submitRating = async () => {
       if (!selectedResourceForRating.value || currentRating.value === 0) return
-      
-      const resourceId = selectedResourceForRating.value
-      const rating = currentRating.value
-      
-      // use the existing rateResource function
-      rateResource(resourceId, rating)
-      
-      // reset current rating input
-      currentRating.value = 0
-      
-      // force reactivity update by triggering a re-render
-      ratings.value = { ...ratings.value }
-      
-      // force Vue to re-evaluate computed properties
-      setTimeout(() => {
+
+      const resourceId = Number(selectedResourceForRating.value)
+      const rating = Number(currentRating.value)
+
+      try {
+        // call cloud function: persists to Firestore and returns aggregate
+        const { average, count } = await reviewService.saveReview(resourceId, rating)
+
+        // keep local cache for immediate UI reflection as well
+        rateResource(resourceId, rating)
+
+        // reset and refresh
+        currentRating.value = 0
         ratings.value = { ...ratings.value }
-        // trigger refresh for getUserRating function
-        ratingRefreshTrigger.value++
-      }, 100)
-      
-      // show success message (optional)
-      alert('Rating submitted successfully!')
+        setTimeout(() => {
+          ratings.value = { ...ratings.value }
+          ratingRefreshTrigger.value++
+        }, 100)
+
+        alert(`Rating saved. Avg: ${average.toFixed(1)} (${count})`)
+      } catch (e) {
+        console.error('submitRating failed', e)
+        alert(getSafeErrorMessage(e))
+      }
     }
     
     onMounted(() => {
       loadData()
     })
     
+    // unify auth: prefer Firebase user, fallback to local auth
+    const unifiedAuth = {
+      isLoggedIn: () => !!firebaseAuthService.getCurrentUser() || localAuth.isLoggedIn(),
+      getCurrentUser: () => firebaseAuthService.getCurrentUser() || localAuth.getCurrentUser(),
+      isAdmin: () => localAuth.isAdmin(),
+    }
+    const authService = unifiedAuth
+
     return {
       resources,
       categories,
@@ -491,98 +503,52 @@ export default {
 .home {
   max-width: 1000px;
   margin: 0 auto;
-  padding: 2rem;
-}
-
-.home h1 {
-  text-align: center;
-  margin-bottom: 2rem;
-  color: #333;
+  padding: 1rem;
 }
 
 .category-filter {
   display: flex;
-  justify-content: center;
   gap: 1rem;
-  margin-bottom: 2rem;
+  margin-bottom: 1rem;
   flex-wrap: wrap;
 }
 
 .filter-btn {
-  background: #ecf0f1;
-  color: #333;
-  border: none;
+  background-color: #f8f9fa;
+  border: 1px solid #ccc;
   padding: 0.5rem 1rem;
-  border-radius: 20px;
   cursor: pointer;
-  transition: all 0.3s;
-}
-
-.filter-btn:hover {
-  background: #bdc3c7;
 }
 
 .resources-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
 }
 
 .resource-card {
-  background: white;
-  padding: 1.5rem;
-  border-radius: 10px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  transition: all 0.3s;
-}
-
-.resource-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+  background-color: white;
+  padding: 1rem;
+  border: 1px solid #ddd;
 }
 
 .resource-title {
-  color: #333;
-  margin-bottom: 0.5rem;
   font-size: 1.1rem;
+  margin-bottom: 0.5rem;
 }
 
 .resource-description {
   color: #666;
   margin-bottom: 1rem;
-  line-height: 1.4;
 }
 
 .resource-category {
-  background: #e3f2fd;
+  background-color: #e3f2fd;
   color: #1976d2;
   padding: 0.25rem 0.5rem;
-  border-radius: 4px;
   display: inline-block;
 }
 
-/* responsive design */
-/* detecting the screen size */
-@media (max-width: 768px) {
-  .home {
-    padding: 1rem;
-  }
-  /* responsive design */
-  .resources-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .category-filter {
-    justify-content: center;
-  }
-  
-  .filter-btn {
-    margin-bottom: 0.5rem;
-  }
-}
-
-/* admin-only features styling */
-/* 仅管理员可见功能的样式 */
 .admin-actions {
   margin-top: 1rem;
   display: flex;
@@ -592,19 +558,12 @@ export default {
 .admin-btn {
   padding: 0.25rem 0.5rem;
   border: none;
-  border-radius: 4px;
-  font-size: 0.8rem;
   cursor: pointer;
-  transition: all 0.3s;
+  font-size: 0.8rem;
 }
 
 .admin-btn.edit {
   background-color: #ffc107;
-  color: #000;
-}
-
-.admin-btn.edit:hover {
-  background-color: #e0a800;
 }
 
 .admin-btn.delete {
@@ -612,137 +571,65 @@ export default {
   color: white;
 }
 
-.admin-btn.delete:hover {
-  background-color: #c82333;
-}
-
-
-
 .admin-section {
-  margin-top: 3rem;
-  padding: 2rem;
+  margin-top: 2rem;
+  padding: 1rem;
   background-color: #f8f9fa;
-  border-radius: 8px;
-  border-left: 4px solid #ffc107;
-}
-
-.admin-section h2 {
-  color: #333;
-  margin-bottom: 1.5rem;
+  border: 1px solid #ddd;
 }
 
 .admin-form {
   display: grid;
   gap: 1rem;
-  max-width: 500px;
-}
-
-.admin-form .form-group {
-  display: flex;
-  flex-direction: column;
-}
-
-.admin-form label {
-  font-weight: bold;
-  margin-bottom: 0.5rem;
-  color: #333;
 }
 
 .admin-form input,
 .admin-form textarea,
 .admin-form select {
-  padding: 0.75rem;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 1rem;
-}
-
-.admin-form textarea {
-  min-height: 100px;
-  resize: vertical;
+  padding: 0.5rem;
+  border: 1px solid #ccc;
 }
 
 .add-btn {
   background-color: #28a745;
   color: white;
   border: none;
-  padding: 0.75rem 1.5rem;
-  border-radius: 4px;
-  font-weight: bold;
+  padding: 0.5rem 1rem;
   cursor: pointer;
-  transition: background-color 0.3s;
 }
-
-.add-btn:hover {
-  background-color: #218838;
-}
-
-/* unified rating system styling */
 
 .unified-rating-section {
-  margin-top: 3rem;
-  padding: 2rem;
+  margin-top: 2rem;
+  padding: 1rem;
   background-color: #f8f9fa;
-  border-radius: 8px;
-  border-left: 4px solid #28a745;
-}
-
-.unified-rating-section h2 {
-  color: #333;
-  margin-bottom: 1.5rem;
-  text-align: center;
+  border: 1px solid #ddd;
 }
 
 .rating-controls {
-  max-width: 600px;
+  max-width: 500px;
   margin: 0 auto;
 }
 
 .resource-selector {
-  margin-bottom: 2rem;
-}
-
-.resource-selector label {
-  display: block;
-  font-weight: bold;
-  margin-bottom: 0.5rem;
-  color: #333;
+  margin-bottom: 1rem;
 }
 
 .resource-dropdown {
   width: 100%;
-  padding: 0.75rem;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 1rem;
-  background-color: white;
+  padding: 0.5rem;
+  border: 1px solid #ccc;
 }
 
 .selected-resource-rating {
   background-color: white;
-  padding: 1.5rem;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  padding: 1rem;
+  border: 1px solid #ddd;
 }
 
 .resource-info {
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
   padding-bottom: 1rem;
   border-bottom: 1px solid #eee;
-}
-
-.resource-info h3 {
-  color: #333;
-  margin-bottom: 0.5rem;
-}
-
-.resource-info p {
-  color: #666;
-  margin: 0;
-}
-
-.current-rating {
-  margin-bottom: 1.5rem;
 }
 
 .rating-display {
@@ -760,37 +647,10 @@ export default {
 .star {
   font-size: 1.2rem;
   color: #ddd;
-  transition: color 0.2s;
 }
 
 .star.filled {
   color: #ffc107;
-}
-
-.star.half {
-  color: #ffc107;
-  background: linear-gradient(90deg, #ffc107 50%, #ddd 50%);
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.rating-text {
-  color: #666;
-  font-size: 0.9rem;
-  font-weight: 500;
-}
-
-.your-rating {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.your-rating-label {
-  font-size: 0.9rem;
-  color: #333;
-  font-weight: 500;
 }
 
 .rating-input-section {
@@ -798,12 +658,6 @@ export default {
   flex-direction: column;
   gap: 1rem;
   align-items: center;
-}
-
-.rate-label {
-  font-size: 1rem;
-  color: #333;
-  font-weight: 500;
 }
 
 .star-inputs {
@@ -815,10 +669,8 @@ export default {
   font-size: 2rem;
   color: #ddd;
   cursor: pointer;
-  transition: color 0.2s;
 }
 
-.star-input:hover,
 .star-input.active {
   color: #ffc107;
 }
@@ -827,20 +679,12 @@ export default {
   background-color: #28a745;
   color: white;
   border: none;
-  padding: 0.75rem 1.5rem;
-  border-radius: 4px;
-  font-weight: bold;
+  padding: 0.5rem 1rem;
   cursor: pointer;
-  transition: background-color 0.3s;
-}
-
-.submit-rating-btn:hover:not(:disabled) {
-  background-color: #218838;
 }
 
 .submit-rating-btn:disabled {
   background-color: #6c757d;
-  cursor: not-allowed;
 }
 
 .login-prompt {
@@ -848,29 +692,17 @@ export default {
   padding: 1rem;
   background-color: #fff3cd;
   border: 1px solid #ffeaa7;
-  border-radius: 4px;
-}
-
-.login-prompt p {
-  margin: 0;
-  color: #856404;
-}
-
-.login-prompt a {
-  color: #007bff;
-  text-decoration: none;
-  font-weight: bold;
-}
-
-.login-prompt a:hover {
-  text-decoration: underline;
 }
 
 .no-selection-prompt {
   text-align: center;
-  padding: 2rem;
+  padding: 1rem;
   color: #666;
-  font-style: italic;
 }
 
+@media (max-width: 768px) {
+  .resources-grid {
+    grid-template-columns: 1fr;
+  }
+}
 </style>

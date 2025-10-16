@@ -2,68 +2,69 @@
   <div class="contact-page">
     <div class="container">
       <h1>Contact Us</h1>
-      <p>Send us a message and we'll get back to you soon.</p>
+      <p>Send us a message and we'll get back to you as soon as possible.</p>
       
       <div class="contact-form">
+        <!-- status message display -->
+        <div v-if="statusMessage" :class="['status-message', statusMessage.success ? 'success' : 'error']">
+          {{ statusMessage.text }}
+        </div>
+        
         <form @submit.prevent="sendMessage">
           <div class="form-group">
-            <label>Your Name</label>
+            <label for="name">Name:</label>
             <input 
               type="text" 
+              id="name" 
               v-model="contactForm.name" 
               required 
-              placeholder="Your name"
-            >
+            />
           </div>
           
           <div class="form-group">
-            <label>Your Email</label>
+            <label for="email">Email:</label>
             <input 
               type="email" 
+              id="email" 
               v-model="contactForm.email" 
               required 
-              placeholder="your@email.com"
-            >
+            />
           </div>
           
           <div class="form-group">
-            <label>Subject</label>
+            <label for="subject">Subject:</label>
             <input 
               type="text" 
+              id="subject" 
               v-model="contactForm.subject" 
               required 
-              placeholder="Message subject"
-            >
+            />
           </div>
           
           <div class="form-group">
-            <label>Message</label>
+            <label for="message">Message:</label>
             <textarea 
+              id="message" 
               v-model="contactForm.message" 
               rows="5" 
-              required 
-              placeholder="Your message here..."
+              required
             ></textarea>
           </div>
           
-          <div class="form-group">
-            <label>Attachment (Optional)</label>
+          <div class="file-input">
+            <label for="attachment">Attachment (optional):</label>
             <input 
               type="file" 
-              @change="handleFileSelect" 
+              id="attachment" 
               ref="fileInput"
-              accept=".pdf,.doc,.docx,.txt,.jpg,.png"
-            >
+              @change="handleFileSelect" 
+            />
           </div>
           
-          <button type="submit" :disabled="isSending">
+          <button type="submit" :disabled="isSending" class="submit-btn">
             {{ isSending ? 'Sending...' : 'Send Message' }}
           </button>
         </form>
-        
-        <div v-if="statusMessage" :class="statusMessage.success ? 'success' : 'error'">
-          {{ statusMessage.text }}
-        </div>
       </div>
     </div>
   </div>
@@ -89,11 +90,10 @@ export default {
     const fileInput = ref(null)
     
     /**
-     * Handle file selection for the attachment input.
-     * - Accepts a File from the change event and converts it to base64.
-     * - Stores the encoded content in form state for optional email attachment.
-     * - Validates read errors and reports a concise status message to the user.
-     * - Keeps the function side-effect free beyond form state updates.
+     * Handle file selection and convert to attachment format.
+     * - Reads the selected file and converts it to base64 string.
+     * - Stores the attachment data for email sending.
+     * - Provides error handling for file processing failures.
      */
     const handleFileSelect = async (event) => {
       const file = event.target.files[0]
@@ -159,8 +159,7 @@ export default {
 
 <style scoped>
 .contact-page {
-  min-height: 100vh;
-  padding: 2rem;
+  padding: 1rem;
 }
 
 .container {
@@ -168,23 +167,10 @@ export default {
   margin: 0 auto;
 }
 
-h1 {
-  text-align: center;
-  color: #333;
-  margin-bottom: 0.5rem;
-}
-
-p {
-  text-align: center;
-  color: #666;
-  margin-bottom: 2rem;
-}
-
 .contact-form {
-  background: white;
-  padding: 2rem;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  background-color: white;
+  padding: 1rem;
+  border: 1px solid #ddd;
 }
 
 .form-group {
@@ -195,64 +181,60 @@ p {
   display: block;
   margin-bottom: 0.5rem;
   font-weight: bold;
-  color: #333;
 }
 
 .form-group input,
 .form-group textarea {
   width: 100%;
-  padding: 0.75rem;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 1rem;
-  box-sizing: border-box;
+  padding: 0.5rem;
+  border: 1px solid #ccc;
 }
 
-.form-group input:focus,
-.form-group textarea:focus {
-  outline: none;
-  border-color: #007bff;
+.file-input {
+  margin-bottom: 1rem;
 }
 
-.form-group textarea {
-  resize: vertical;
+.file-input label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: bold;
 }
 
-button {
+.file-input input[type="file"] {
   width: 100%;
-  background: #007bff;
+  padding: 0.5rem;
+  border: 1px solid #ccc;
+}
+
+.submit-btn {
+  width: 100%;
+  background-color: #007bff;
   color: white;
   border: none;
-  padding: 0.75rem;
-  border-radius: 4px;
-  font-size: 1rem;
+  padding: 0.5rem 1rem;
   cursor: pointer;
 }
 
-button:hover:not(:disabled) {
-  background: #0056b3;
-}
-
-button:disabled {
-  background: #6c757d;
+.submit-btn:disabled {
+  opacity: 0.6;
   cursor: not-allowed;
 }
 
-.success {
-  background: #d4edda;
+.status-message {
+  padding: 0.5rem;
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+.status-message.success {
+  background-color: #d4edda;
   color: #155724;
-  padding: 1rem;
-  border-radius: 4px;
-  margin-top: 1rem;
   border: 1px solid #c3e6cb;
 }
 
-.error {
-  background: #f8d7da;
+.status-message.error {
+  background-color: #f8d7da;
   color: #721c24;
-  padding: 1rem;
-  border-radius: 4px;
-  margin-top: 1rem;
   border: 1px solid #f5c6cb;
 }
 </style>

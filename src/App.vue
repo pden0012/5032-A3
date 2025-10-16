@@ -9,16 +9,17 @@
         <span></span>
       </button>
       <div class="nav-links" :class="{ active: mobileMenuOpen }">
-        <router-link to="/" @click="closeMobileMenu">Home</router-link>
-        <router-link to="/tables" @click="closeMobileMenu">Tables</router-link>
-        <router-link to="/contact" @click="closeMobileMenu">Contact</router-link>
+        <a href="#" @click.prevent="navigateTo('/')">Home</a>
+        <a href="#" @click.prevent="navigateTo('/tables')">Tables</a>
+        <a href="#" @click.prevent="navigateTo('/map')">Map</a>
+        <a href="#" @click.prevent="navigateTo('/contact')">Contact</a>
         
         <!-- show login/register when user is not logged in -->
         <!-- 用户未登录时显示登录/注册链接 -->
         <template v-if="!isAuthenticated">
-          <router-link to="/login" @click="closeMobileMenu">Login</router-link>
+          <a href="#" @click.prevent="navigateTo('/login')">Login</a>
           <!-- this is for the register page -->
-          <router-link to="/register" @click="closeMobileMenu">Register</router-link>
+          <a href="#" @click.prevent="navigateTo('/register')">Register</a>
         </template>
         
         <!-- show user info and logout when user is logged in -->
@@ -29,7 +30,7 @@
           <!-- show admin-only navigation items -->
           <!-- 显示仅管理员可见的导航项 -->
           <template v-if="isAdmin">
-            <router-link to="/admin" @click="closeMobileMenu" class="admin-link">Admin Panel</router-link>
+            <a href="#" @click.prevent="navigateTo('/admin')" class="admin-link">Admin Panel</a>
           </template>
           
           <button @click="handleLogout" class="logout-button">Logout</button>
@@ -51,6 +52,7 @@
 
 <script>
 import { ref, onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { authService } from './services/auth'
 import { firebaseAuthService } from './services/firebaseAuth'
 
@@ -61,6 +63,10 @@ export default {
   // setup function for composition API
   // 使用组合式API的setup函数
   setup() {
+    // router instance for programmatic navigation
+    // 路由器实例用于编程式导航
+    const router = useRouter()
+    
     // mobile menu state
     // 移动端菜单状态
     const mobileMenuOpen = ref(false)
@@ -73,8 +79,19 @@ export default {
     
     // function to close mobile menu
     // 关闭移动端菜单的函数
-    const closeMobileMenu = () => {
+    const closeMobileMenu = (event) => {
+      console.log('Closing mobile menu') // debug log
       mobileMenuOpen.value = false
+      // don't prevent default navigation behavior
+      // 不阻止默认的导航行为
+    }
+    
+    // function to navigate to route and close mobile menu
+    // 导航到路由并关闭移动端菜单的函数
+    const navigateTo = (path) => {
+      console.log('Navigating to:', path) // debug log
+      mobileMenuOpen.value = false // close mobile menu
+      router.push(path) // navigate to route
     }
     
     // function to logout user from both services
@@ -174,6 +191,7 @@ export default {
       mobileMenuOpen,
       toggleMobileMenu,
       closeMobileMenu,
+      navigateTo,
       currentUser,
       isAuthenticated,
       isAdmin,
@@ -203,17 +221,16 @@ body {
 }
 
 .navbar {
-  background: #667eea;
+  background-color: #333;
   padding: 1rem;
   color: white;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  position: relative;
 }
 
 .nav-brand {
-  font-size: 1.5rem;
+  font-size: 1.2rem;
   font-weight: bold;
 }
 
@@ -227,23 +244,10 @@ body {
 }
 
 .mobile-menu-toggle span {
-  width: 25px;
-  height: 3px;
+  width: 20px;
+  height: 2px;
   background: white;
-  margin: 3px 0;
-  transition: 0.3s;
-}
-
-.mobile-menu-toggle.active span:nth-child(1) {
-  transform: rotate(-45deg) translate(-5px, 6px);
-}
-
-.mobile-menu-toggle.active span:nth-child(2) {
-  opacity: 0;
-}
-
-.mobile-menu-toggle.active span:nth-child(3) {
-  transform: rotate(45deg) translate(-5px, -6px);
+  margin: 2px 0;
 }
 
 .nav-links {
@@ -254,80 +258,44 @@ body {
 .nav-links a {
   color: white;
   text-decoration: none;
-  padding: 0.5rem 1rem;
-  border-radius: 4px;
-  transition: background-color 0.3s;
+  padding: 0.5rem;
 }
 
-.nav-links a:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+.nav-links a.router-link-active {
+  background-color: #007bff;
 }
 
-/* user welcome message styling */
-/* 用户欢迎信息样式 */
 .user-welcome {
   color: white;
-  padding: 0.5rem 1rem;
-  font-weight: bold;
+  padding: 0.5rem;
+  font-size: 0.9rem;
 }
 
-/* admin link styling */
-/* 管理员链接样式 */
 .admin-link {
-  color: #ffc107;
-  text-decoration: none;
-  padding: 0.5rem 1rem;
-  border-radius: 4px;
-  transition: background-color 0.3s;
-  font-weight: bold;
+  background-color: #dc3545;
 }
 
-.admin-link:hover {
-  background-color: rgba(255, 193, 7, 0.2);
-  color: #ffc107;
-}
-
-/* logout button styling */
-/* 登出按钮样式 */
 .logout-button {
   background-color: #dc3545;
   color: white;
   border: none;
   padding: 0.5rem 1rem;
-  border-radius: 4px;
   cursor: pointer;
-  transition: background-color 0.3s;
-}
-
-.logout-button:hover {
-  background-color: #c82333;
 }
 
 .main-content {
   flex: 1;
-  padding: 2rem;
+  padding: 1rem;
 }
 
 .footer {
-  background: #333;
+  background-color: #333;
   color: white;
   text-align: center;
   padding: 1rem;
 }
 
-/* Responsive design - Tablet devices */
 @media (max-width: 768px) {
-  .main-content {
-    padding: 1rem;
-  }
-  
-  .nav-brand {
-    font-size: 1.2rem;
-  }
-}
-
-/* Responsive design - Mobile devices */
-@media (max-width: 480px) {
   .mobile-menu-toggle {
     display: flex;
   }
@@ -337,37 +305,18 @@ body {
     top: 100%;
     left: 0;
     right: 0;
-    background: #667eea;
+    background-color: #333;
     flex-direction: column;
     padding: 1rem;
     transform: translateY(-100%);
     opacity: 0;
     visibility: hidden;
-    transition: all 0.3s ease;
   }
   
   .nav-links.active {
     transform: translateY(0);
     opacity: 1;
     visibility: visible;
-  }
-  
-  .nav-links a {
-    padding: 1rem;
-    text-align: center;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  }
-  
-  .nav-links a:last-child {
-    border-bottom: none;
-  }
-  
-  .main-content {
-    padding: 0.5rem;
-  }
-  
-  .nav-brand {
-    font-size: 1rem;
   }
 }
 </style>

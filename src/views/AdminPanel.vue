@@ -1,175 +1,144 @@
 <template>
   <div class="admin-panel">
-    <!-- admin panel header -->
     <div class="admin-header">
       <h1>Admin Panel</h1>
-      <p>Welcome to the administrative dashboard</p>
+      <p>Manage users, settings, and system configuration</p>
     </div>
     
-    <!-- admin-only content sections -->
     <div class="admin-content">
-      <!-- user management section -->
+      <!-- User Statistics Section -->
       <div class="admin-section">
-        <h2>User Management</h2>
+        <h2>User Statistics</h2>
         <div class="user-stats">
           <div class="stat-card">
-            <h3>Total Users</h3>
-            <span class="stat-number">{{ totalUsers }}</span>
+            <h3>{{ totalUsers }}</h3>
+            <p>Total Users</p>
           </div>
           <div class="stat-card">
-            <h3>Admin Users</h3>
-            <span class="stat-number">{{ adminUsers }}</span>
+            <h3>{{ adminUsers }}</h3>
+            <p>Admin Users</p>
           </div>
           <div class="stat-card">
-            <h3>Regular Users</h3>
-            <span class="stat-number">{{ regularUsers }}</span>
+            <h3>{{ regularUsers }}</h3>
+            <p>Regular Users</p>
           </div>
+        </div>
+      </div>
+      
+      <!-- User Management Section -->
+      <div class="admin-section">
+        <h2>User Management</h2>
+        <div class="admin-controls">
+          <button 
+            @click="toggleRegistration" 
+            :class="['toggle-btn', registrationEnabled ? 'enabled' : 'disabled']"
+          >
+            {{ registrationEnabled ? 'Disable' : 'Enable' }} Registration
+          </button>
+          <button @click="exportUsers" class="export-btn">Export Users</button>
+          <button @click="clearAllData" class="danger-btn">Clear All Data</button>
+          <button @click="resetToDefaults" class="reset-btn">Reset to Defaults</button>
         </div>
         
-        <!-- user list -->
-        <div class="user-list">
-          <h3>All Users</h3>
-          <div class="user-table">
-            <div class="table-header">
-              <span>ID</span>
-              <span>Username</span>
-              <span>Email</span>
-              <span>Role</span>
-              <span>Created</span>
-            </div>
-            <div 
-              v-for="user in allUsers" 
-              :key="user.id" 
-              class="table-row"
-            >
-              <span>{{ user.id }}</span>
-              <span>{{ user.username }}</span>
-              <span>{{ user.email }}</span>
-              <span class="role-badge" :class="user.role">
-                {{ user.role }}
-              </span>
-              <span>{{ formatDate(user.createdAt) }}</span>
-            </div>
-          </div>
+        <div class="users-table">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Username</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Registered</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="user in allUsers" :key="user.id">
+                <td>{{ user.id }}</td>
+                <td>{{ user.username }}</td>
+                <td>{{ user.email }}</td>
+                <td>
+                  <span :class="['role-badge', user.role.toLowerCase()]">
+                    {{ user.role }}
+                  </span>
+                </td>
+                <td>{{ formatDate(user.registeredAt) }}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
       
-      <!-- system settings section -->
+      <!-- Email Management Section -->
       <div class="admin-section">
-        <h2>System Settings</h2>
-        <div class="settings-grid">
-          <div class="setting-card">
-            <h3>Application Status</h3>
-            <p>System is running normally</p>
-            <button class="status-button active">Active</button>
-          </div>
-          <div class="setting-card">
-            <h3>Database Status</h3>
-            <p>Local storage is operational</p>
-            <button class="status-button active">Connected</button>
-          </div>
-          <div class="setting-card">
-            <h3>User Registration</h3>
-            <p>New user registration is enabled</p>
-            <button class="toggle-button" @click="toggleRegistration">
-              {{ registrationEnabled ? 'Enabled' : 'Disabled' }}
-            </button>
-          </div>
+        <h2>Send Email</h2>
+        
+        <div v-if="emailMessage" :class="['email-status', emailMessage.success ? 'success' : 'error']">
+          {{ emailMessage.text }}
         </div>
-      </div>
-      
-      <!-- admin actions section -->
-      <div class="admin-section">
-        <h2>Admin Actions</h2>
-        <div class="action-buttons">
-          <button class="action-button primary" @click="exportUsers">
-            Export User Data
-          </button>
-          <button class="action-button secondary" @click="clearAllData">
-            Clear All Data
-          </button>
-          <button class="action-button warning" @click="resetToDefaults">
-            Reset to Defaults
-          </button>
-        </div>
-      </div>
-      
-      <!-- Email sending section -->
-      <div class="admin-section">
-        <h2>Email Management</h2>
-        <div class="email-form">
-          <h3>Send Email with Attachment</h3>
-          <form @submit.prevent="sendEmail">
+        
+        <form @submit.prevent="sendEmail">
+          <div class="form-row">
             <div class="form-group">
-              <label>Recipient Email:</label>
+              <label for="to">To:</label>
               <input 
                 type="email" 
+                id="to" 
                 v-model="emailForm.to" 
                 required 
-                placeholder="recipient@example.com"
-              >
+              />
             </div>
-            
             <div class="form-group">
-              <label>Subject:</label>
+              <label for="subject">Subject:</label>
               <input 
                 type="text" 
+                id="subject" 
                 v-model="emailForm.subject" 
                 required 
-                placeholder="Email subject"
-              >
+              />
             </div>
-            
-            <div class="form-group">
-              <label>Message:</label>
-              <textarea 
-                v-model="emailForm.text" 
-                rows="4" 
-                required 
-                placeholder="Your message here..."
-              ></textarea>
-            </div>
-            
-            <div class="form-group">
-              <label>Attachment (Optional):</label>
-              <input 
-                type="file" 
-                @change="handleFileSelect" 
-                ref="fileInput"
-                accept=".pdf,.doc,.docx,.txt,.jpg,.png"
-              >
-              <small>Supported formats: PDF, DOC, DOCX, TXT, JPG, PNG</small>
-            </div>
-            
-            <button type="submit" :disabled="isSendingEmail">
-              {{ isSendingEmail ? 'Sending...' : 'Send Email' }}
-            </button>
-          </form>
-          
-          <!-- Email status message -->
-          <div v-if="emailMessage" :class="emailMessage.success ? 'email-success' : 'email-error'">
-            {{ emailMessage.text }}
           </div>
-        </div>
+          
+          <div class="form-group">
+            <label for="text">Message:</label>
+            <textarea 
+              id="text" 
+              v-model="emailForm.text" 
+              rows="5" 
+              required
+            ></textarea>
+          </div>
+          
+          <div class="form-group">
+            <label for="attachment">Attachment (optional):</label>
+            <input 
+              type="file" 
+              id="attachment" 
+              ref="fileInput"
+              @change="handleFileSelect" 
+            />
+          </div>
+          
+          <button type="submit" :disabled="isSendingEmail" class="send-btn">
+            {{ isSendingEmail ? 'Sending...' : 'Send Email' }}
+          </button>
+        </form>
       </div>
     </div>
   </div>
 </template>
 
 <script>
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { authService } from '../services/auth'
 import { emailService } from '../services/emailService'
 
-// admin panel component for role-based access control
 export default {
   name: 'AdminPanel',
   setup() {
-    // reactive data for admin panel
     const allUsers = ref([])
     const registrationEnabled = ref(true)
     
-    // email form data for sending emails
+    // Email form data
     const emailForm = ref({
       to: '',
       subject: '',
@@ -180,113 +149,131 @@ export default {
     const emailMessage = ref(null)
     const fileInput = ref(null)
     
-    // computed properties for user statistics
-    const totalUsers = computed(() => allUsers.value.length)
-    const adminUsers = computed(() => 
-      allUsers.value.filter(user => user.role === 'admin').length
-    )
-    const regularUsers = computed(() => 
-      allUsers.value.filter(user => user.role === 'user').length
-    )
-    
-    // function to load all users from storage
     /**
-     * Load users from localStorage for admin overview.
-     * - Parses the stored JSON array when present.
-     * - Keeps an empty list when no data exists to avoid errors.
-     * - Centralizes the deserialization logic used by export/reset helpers.
+     * Load all users from local storage and populate the users array.
+     * Retrieves user data from browser localStorage and parses JSON format.
+     * Initializes empty array if no users exist in storage.
+     * Updates reactive users list for display in admin interface.
      */
     const loadUsers = () => {
-      const storedUsers = localStorage.getItem('users')
-      if (storedUsers) {
-        allUsers.value = JSON.parse(storedUsers)
+      try {
+        const usersData = localStorage.getItem('users')
+        if (usersData) {
+          allUsers.value = JSON.parse(usersData)
+        } else {
+          allUsers.value = []
+        }
+      } catch (error) {
+        console.error('Error loading users:', error)
+        allUsers.value = []
       }
     }
     
-    // function to format date for display
     /**
-     * Format an ISO date string into a locale date for display.
-     * - Avoids external libs; relies on built-in Date + toLocaleDateString.
-     * - Returns a short, readable date for table cells and summaries.
+     * Format date string for display in user-friendly format.
+     * Converts timestamp or date string to readable format.
+     * Handles different date formats and provides fallback display.
+     * Returns formatted date string for table display.
      */
     const formatDate = (dateString) => {
-      const date = new Date(dateString)
-      return date.toLocaleDateString()
+      try {
+        return new Date(dateString).toLocaleDateString()
+      } catch (error) {
+        return 'Unknown'
+      }
     }
     
-    // function to toggle user registration
     /**
-     * Toggle the registration open/closed flag for the UI demo.
-     * - Pure UI state; does not persist or affect backend systems.
+     * Toggle user registration status between enabled and disabled states.
+     * Updates registration setting in localStorage for persistence.
+     * Provides visual feedback for current registration status.
+     * Controls whether new users can register accounts.
      */
     const toggleRegistration = () => {
       registrationEnabled.value = !registrationEnabled.value
+      localStorage.setItem('registrationEnabled', registrationEnabled.value.toString())
     }
     
-    // function to export user data
     /**
-     * Export current users as a JSON file.
-     * - Serializes the table data and triggers a client-side download.
-     * - Uses Blob + object URL to avoid server roundtrips.
+     * Export all user data to downloadable JSON file.
+     * Creates downloadable file containing complete user database.
+     * Generates timestamped filename for easy identification.
+     * Triggers browser download with user data export.
      */
     const exportUsers = () => {
-      const dataStr = JSON.stringify(allUsers.value, null, 2)
-      const dataBlob = new Blob([dataStr], { type: 'application/json' })
-      const url = URL.createObjectURL(dataBlob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = 'users-export.json'
-      link.click()
-      URL.revokeObjectURL(url)
+      try {
+        const dataStr = JSON.stringify(allUsers.value, null, 2)
+        const dataBlob = new Blob([dataStr], { type: 'application/json' })
+        const url = URL.createObjectURL(dataBlob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = `users-export-${new Date().toISOString().split('T')[0]}.json`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        URL.revokeObjectURL(url)
+      } catch (error) {
+        console.error('Error exporting users:', error)
+      }
     }
     
-    // function to clear all user data
     /**
-     * Clear all user-related localStorage entries.
-     * - Confirms with the operator before destructive action.
-     * - Empties users and auth flags to simulate a reset state.
+     * Clear all user data and reset system to empty state.
+     * Removes all users from localStorage and resets user array.
+     * Provides destructive action confirmation for data safety.
+     * Restores system to initial empty user state.
      */
     const clearAllData = () => {
       if (confirm('Are you sure you want to clear all user data? This action cannot be undone.')) {
         localStorage.removeItem('users')
-        localStorage.removeItem('currentUser')
-        localStorage.removeItem('isAuthenticated')
         allUsers.value = []
-        alert('All data has been cleared. Please refresh the page.')
+        alert('All user data has been cleared.')
       }
     }
     
-    // function to reset to default users
     /**
-     * Reset local data to default (empty list) for demonstration.
-     * - Clears overrides then reloads from the default source.
-     * - Prompts the user to avoid accidental data loss.
+     * Reset system to default configuration and sample data.
+     * Restores default admin user and system settings.
+     * Creates sample user data for testing and demonstration.
+     * Reinitializes system with default configuration values.
      */
     const resetToDefaults = () => {
-      if (confirm('Are you sure you want to reset to default users? This will remove all custom users.')) {
-        localStorage.removeItem('users')
-        localStorage.removeItem('currentUser')
-        localStorage.removeItem('isAuthenticated')
-        loadUsers()
-        alert('Reset to default users. Please refresh the page.')
+      if (confirm('Are you sure you want to reset to defaults? This will create sample data.')) {
+        const defaultUsers = [
+          {
+            id: 1,
+            username: 'admin',
+            email: 'admin@example.com',
+            role: 'Admin',
+            registeredAt: new Date().toISOString()
+          },
+          {
+            id: 2,
+            username: 'user1',
+            email: 'user1@example.com',
+            role: 'User',
+            registeredAt: new Date().toISOString()
+          }
+        ]
+        localStorage.setItem('users', JSON.stringify(defaultUsers))
+        allUsers.value = defaultUsers
+        registrationEnabled.value = true
+        localStorage.setItem('registrationEnabled', 'true')
+        alert('System has been reset to defaults.')
       }
     }
     
-    // load users when component mounts
-    onMounted(() => {
-      loadUsers()
-    })
-    
     /**
-     * handleFileSelect - Processes file selection for email attachment
-     * Converts selected file to attachment format for email sending
+     * Handle file selection and convert to attachment format.
+     * Processes selected file and converts to base64 for email attachment.
+     * Stores attachment data for email sending functionality.
+     * Provides error handling for file processing failures.
      */
     const handleFileSelect = async (event) => {
       const file = event.target.files[0]
       if (file) {
         try {
           emailForm.value.attachment = await emailService.fileToAttachment(file)
-          emailMessage.value = { success: true, text: `File "${file.name}" selected for attachment` }
         } catch (error) {
           emailMessage.value = { success: false, text: 'Failed to process file' }
         }
@@ -294,8 +281,10 @@ export default {
     }
     
     /**
-     * sendEmail - Handles email sending process with attachment support
-     * Implements comprehensive email sending with error handling and user feedback
+     * Send email through configured email service.
+     * Processes email form data and sends via email service.
+     * Handles attachment inclusion and success/failure feedback.
+     * Clears form on successful sending and shows status message.
      */
     const sendEmail = async () => {
       isSendingEmail.value = true
@@ -324,6 +313,19 @@ export default {
         isSendingEmail.value = false
       }
     }
+    
+    // Computed properties for statistics
+    const totalUsers = computed(() => allUsers.value.length)
+    const adminUsers = computed(() => allUsers.value.filter(user => user.role === 'Admin').length)
+    const regularUsers = computed(() => allUsers.value.filter(user => user.role === 'User').length)
+    
+    onMounted(() => {
+      loadUsers()
+      const regEnabled = localStorage.getItem('registrationEnabled')
+      if (regEnabled !== null) {
+        registrationEnabled.value = regEnabled === 'true'
+      }
+    })
 
     return {
       allUsers,
@@ -349,335 +351,192 @@ export default {
 </script>
 
 <style scoped>
-/* admin panel styling */
 .admin-panel {
-  max-width: 1200px;
+  max-width: 1000px;
   margin: 0 auto;
-  padding: 2rem;
+  padding: 1rem;
 }
 
 .admin-header {
   text-align: center;
-  margin-bottom: 3rem;
-  padding: 2rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  margin-bottom: 2rem;
+  padding: 1rem;
+  background-color: #333;
   color: white;
-  border-radius: 12px;
-}
-
-.admin-header h1 {
-  font-size: 2.5rem;
-  margin-bottom: 0.5rem;
-}
-
-.admin-header p {
-  font-size: 1.2rem;
-  opacity: 0.9;
 }
 
 .admin-content {
   display: grid;
-  gap: 2rem;
+  gap: 1rem;
 }
 
 .admin-section {
-  background: white;
-  padding: 2rem;
-  border-radius: 12px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  background-color: white;
+  padding: 1rem;
+  border: 1px solid #ddd;
 }
 
-.admin-section h2 {
-  color: #333;
-  margin-bottom: 1.5rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 2px solid #667eea;
-}
-
-/* user statistics styling */
 .user-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 1rem;
-  margin-bottom: 2rem;
+  margin-bottom: 1rem;
 }
 
 .stat-card {
-  background: #f8f9fa;
-  padding: 1.5rem;
-  border-radius: 8px;
   text-align: center;
-  border-left: 4px solid #667eea;
+  padding: 1rem;
+  background-color: #f8f9fa;
+  border: 1px solid #ddd;
 }
 
 .stat-card h3 {
-  color: #666;
-  margin-bottom: 0.5rem;
-  font-size: 0.9rem;
-  text-transform: uppercase;
-}
-
-.stat-number {
   font-size: 2rem;
-  font-weight: bold;
-  color: #667eea;
+  margin-bottom: 0.5rem;
+  color: #007bff;
 }
 
-/* user table styling */
-.user-table {
-  background: #f8f9fa;
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.table-header {
-  display: grid;
-  grid-template-columns: 60px 1fr 1fr 100px 120px;
+.admin-controls {
+  display: flex;
   gap: 1rem;
-  padding: 1rem;
-  background: #667eea;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.toggle-btn, .export-btn, .danger-btn, .reset-btn {
+  padding: 0.5rem 1rem;
+  border: none;
+  cursor: pointer;
+}
+
+.toggle-btn.enabled {
+  background-color: #28a745;
   color: white;
+}
+
+.toggle-btn.disabled {
+  background-color: #dc3545;
+  color: white;
+}
+
+.export-btn {
+  background-color: #17a2b8;
+  color: white;
+}
+
+.danger-btn {
+  background-color: #dc3545;
+  color: white;
+}
+
+.reset-btn {
+  background-color: #ffc107;
+  color: #000;
+}
+
+.users-table {
+  overflow-x: auto;
+}
+
+.users-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.users-table th,
+.users-table td {
+  padding: 0.5rem;
+  border: 1px solid #ddd;
+  text-align: left;
+}
+
+.users-table th {
+  background-color: #f8f9fa;
   font-weight: bold;
-}
-
-.table-row {
-  display: grid;
-  grid-template-columns: 60px 1fr 1fr 100px 120px;
-  gap: 1rem;
-  padding: 1rem;
-  border-bottom: 1px solid #dee2e6;
-  align-items: center;
-}
-
-.table-row:last-child {
-  border-bottom: none;
 }
 
 .role-badge {
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
   font-size: 0.8rem;
-  font-weight: bold;
-  text-align: center;
 }
 
 .role-badge.admin {
-  background: #ffc107;
-  color: #000;
+  background-color: #dc3545;
+  color: white;
 }
 
 .role-badge.user {
-  background: #28a745;
+  background-color: #28a745;
   color: white;
 }
 
-/* settings grid styling */
-.settings-grid {
+.form-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  grid-template-columns: 1fr 1fr;
   gap: 1rem;
-}
-
-.setting-card {
-  background: #f8f9fa;
-  padding: 1.5rem;
-  border-radius: 8px;
-  text-align: center;
-}
-
-.setting-card h3 {
-  color: #333;
-  margin-bottom: 0.5rem;
-}
-
-.setting-card p {
-  color: #666;
   margin-bottom: 1rem;
 }
 
-.status-button {
-  padding: 0.5rem 1rem;
+.form-group {
+  margin-bottom: 1rem;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: bold;
+}
+
+.form-group input,
+.form-group textarea {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid #ccc;
+}
+
+.send-btn {
+  background-color: #28a745;
+  color: white;
   border: none;
-  border-radius: 4px;
-  font-weight: bold;
-  cursor: pointer;
-}
-
-.status-button.active {
-  background: #28a745;
-  color: white;
-}
-
-.toggle-button {
   padding: 0.5rem 1rem;
-  border: 2px solid #667eea;
-  background: white;
-  color: #667eea;
-  border-radius: 4px;
-  font-weight: bold;
   cursor: pointer;
-  transition: all 0.3s;
 }
 
-.toggle-button:hover {
-  background: #667eea;
-  color: white;
+.send-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
-/* action buttons styling */
-.action-buttons {
-  display: flex;
-  gap: 1rem;
-  flex-wrap: wrap;
+.email-status {
+  padding: 0.5rem;
+  margin-bottom: 1rem;
+  text-align: center;
 }
 
-.action-button {
-  padding: 0.75rem 1.5rem;
-  border: none;
-  border-radius: 6px;
-  font-weight: bold;
-  cursor: pointer;
-  transition: all 0.3s;
+.email-status.success {
+  background-color: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
 }
 
-.action-button.primary {
-  background: #007bff;
-  color: white;
+.email-status.error {
+  background-color: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
 }
 
-.action-button.primary:hover {
-  background: #0056b3;
-}
-
-.action-button.secondary {
-  background: #6c757d;
-  color: white;
-}
-
-.action-button.secondary:hover {
-  background: #545b62;
-}
-
-.action-button.warning {
-  background: #ffc107;
-  color: #000;
-}
-
-.action-button.warning:hover {
-  background: #e0a800;
-}
-
-/* responsive design */
 @media (max-width: 768px) {
-  .admin-panel {
-    padding: 1rem;
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+  
+  .admin-controls {
+    flex-direction: column;
   }
   
   .user-stats {
     grid-template-columns: 1fr;
-  }
-  
-  .table-header,
-  .table-row {
-    grid-template-columns: 1fr;
-    gap: 0.5rem;
-  }
-  
-  .action-buttons {
-    flex-direction: column;
-  }
-}
-
-/* Email form styling */
-.email-form {
-  background: #f8f9fa;
-  padding: 2rem;
-  border-radius: 8px;
-  margin-top: 1rem;
-}
-
-.email-form h3 {
-  color: #333;
-  margin-bottom: 1.5rem;
-}
-
-.email-form .form-group {
-  margin-bottom: 1.5rem;
-}
-
-.email-form label {
-  display: block;
-  margin-bottom: 0.5rem;
-  font-weight: bold;
-  color: #333;
-}
-
-.email-form input,
-.email-form textarea {
-  width: 100%;
-  padding: 0.75rem;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 1rem;
-  transition: border-color 0.3s;
-}
-
-.email-form input:focus,
-.email-form textarea:focus {
-  outline: none;
-  border-color: #007bff;
-  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.2);
-}
-
-.email-form button {
-  background: #007bff;
-  color: white;
-  border: none;
-  padding: 0.75rem 1.5rem;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 1rem;
-  transition: background-color 0.3s;
-}
-
-.email-form button:hover:not(:disabled) {
-  background: #0056b3;
-}
-
-.email-form button:disabled {
-  background: #6c757d;
-  cursor: not-allowed;
-}
-
-.email-form small {
-  display: block;
-  margin-top: 0.25rem;
-  color: #666;
-  font-size: 0.875rem;
-}
-
-.email-success {
-  background: #d4edda;
-  color: #155724;
-  padding: 1rem;
-  border-radius: 4px;
-  margin-top: 1rem;
-  border: 1px solid #c3e6cb;
-}
-
-.email-error {
-  background: #f8d7da;
-  color: #721c24;
-  padding: 1rem;
-  border-radius: 4px;
-  margin-top: 1rem;
-  border: 1px solid #f5c6cb;
-}
-
-/* Responsive email form */
-@media (max-width: 768px) {
-  .email-form {
-    padding: 1rem;
   }
 }
 </style>

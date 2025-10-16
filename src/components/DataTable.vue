@@ -1,180 +1,270 @@
 <template>
-  <!-- Interactive table: global search, per-column search, sort, pagination -->
   <div class="table-wrapper">
-    <!-- Global search input -->
+    <!-- global search input -->
     <div class="toolbar">
-      <input v-model="globalQuery" placeholder="Search all columns..." />
+      <input 
+        v-model="globalQuery" 
+        placeholder="Search all columns..." 
+      />
     </div>
-
-    <table class="table">
-      <thead>
-        <tr>
-          <!-- Clickable headers toggle asc/desc sort -->
-          <th
-            v-for="col in columns"
-            :key="col.key"
-            @click="toggleSort(col.key)"
-            class="th-sort"
-          >
-            {{ col.label }}
-            <span v-if="sort.key === col.key">
-              {{ sort.dir === 'asc' ? '▲' : '▼' }}
-            </span>
-          </th>
-        </tr>
-        <tr>
-          <!-- Per-column search inputs -->
-          <th v-for="col in columns" :key="col.key">
-            <input
-              v-model="columnQueries[col.key]"
-              :placeholder="`Search ${col.label}`"
-            />
-          </th>
-        </tr>
-      </thead>
-
-      <tbody>
-        <!-- Page-sliced rows -->
-        <tr v-for="row in pagedRows" :key="rowKey(row)">
-          <td v-for="col in columns" :key="col.key">
-            {{ renderCell(row[col.key]) }}
-          </td>
-        </tr>
-        <tr v-if="pagedRows.length === 0">
-          <td :colspan="columns.length" style="text-align:center;">No data</td>
-        </tr>
-      </tbody>
-    </table>
-
-    <!-- Simple pager: 10 rows per page by default -->
+    
+    <!-- data table with sorting and column search -->
+    <div class="table-container">
+      <table class="table">
+        <thead>
+          <tr>
+            <th 
+              v-for="col in columns" 
+              :key="col.key"
+              :class="{ 'th-sort': true }"
+              @click="toggleSort(col.key)"
+            >
+              {{ col.label }}
+              <span v-if="sort.key === col.key">
+                {{ sort.dir === 'asc' ? '↑' : '↓' }}
+              </span>
+            </th>
+          </tr>
+          <tr>
+            <th v-for="col in columns" :key="`search-${col.key}`">
+              <input 
+                v-model="columnQueries[col.key]" 
+                :placeholder="`Search ${col.label.toLowerCase()}...`"
+              />
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="row in pagedRows" :key="rowKey(row)">
+            <td v-for="col in columns" :key="col.key">
+              {{ renderCell(row, col) }}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    
+    <!-- pagination controls -->
     <div class="pagination">
-      <button :disabled="page===1" @click="page--">Prev</button>
-      <span>Page {{ page }} / {{ totalPages }}</span>
-      <button :disabled="page===totalPages || totalPages===0" @click="page++">Next</button>
+      <button 
+        @click="page = Math.max(1, page - 1)" 
+        :disabled="page === 1"
+      >
+        Previous
+      </button>
+      <span>Page {{ page }} of {{ totalPages }}</span>
+      <button 
+        @click="page = Math.min(totalPages, page + 1)" 
+        :disabled="page === totalPages"
+      >
+        Next
+      </button>
     </div>
   </div>
-  <!-- End interactive table -->
 </template>
 
-<script setup>
-import { computed, reactive, ref, watch } from 'vue'
+<script>
+import { ref, computed } from 'vue'
 
-// Public props (columns/rows/pageSize/rowKeyFn)
-const props = defineProps({
-  columns: { type: Array, required: true },
-  rows: { type: Array, required: true },
-  pageSize: { type: Number, default: 10 },
-  rowKeyFn: { type: Function, default: null }
-})
-
-const globalQuery = ref('')
-const columnQueries = reactive({})
-props.columns.forEach(c => (columnQueries[c.key] = ''))
-
-const sort = reactive({ key: null, dir: 'asc' })
-const page = ref(1)
-
-watch([() => props.rows, globalQuery, () => JSON.stringify(columnQueries)], () => {
-  page.value = 1
-})
-
-/**
- * Derive a unique key for each table row.
- * - Uses caller-provided rowKeyFn when available for stability.
- * - Falls back to JSON stringification which is safe for demo data.
- * - Stable keys help Vue efficiently update DOM on sort/search/page.
- */
-const rowKey = (row) => (props.rowKeyFn ? props.rowKeyFn(row) : JSON.stringify(row))
-
-/**
- * Render a cell value to a human-readable string.
- * - Normalizes null/undefined to empty string to avoid "undefined" text.
- * - Keeps formatting minimal; caller can extend via scoped slots if needed.
- * - This function centralizes future formatting rules (e.g., dates/numbers).
- */
-const renderCell = (val) => {
-  if (val == null) return ''
-  return String(val)
-}
-
-/**
- * Apply global and per-column filters.
- * - Global query scans across all columns of each row.
- * - Column queries narrow down by individual field, supporting precise search.
- * - Returns a filtered array, leaving the original dataset untouched.
- */
-const filteredRows = computed(() => {
-  const g = globalQuery.value.trim().toLowerCase()
-  return props.rows.filter(row => {
-    for (const col of props.columns) {
-      const q = (columnQueries[col.key] || '').trim().toLowerCase()
-      if (q && !String(row[col.key] ?? '').toLowerCase().includes(q)) return false
+export default {
+  name: 'DataTable',
+  props: {
+    columns: { type: Array, required: true },
+    rows: { type: Array, required: true },
+    pageSize: { type: Number, default: 10 },
+    rowKeyFn: { type: Function, required: true }
+  },
+  setup(props) {
+    const globalQuery = ref('')
+    const columnQueries = ref({})
+    const sort = ref({ key: null, dir: 'asc' })
+    const page = ref(1)
+    
+    /**
+     * Generate unique row key using provided rowKeyFn function.
+     * Uses the rowKeyFn prop to extract unique identifier from each row.
+     * Ensures proper Vue reactivity and key-based rendering optimization.
+     */
+    const rowKey = (row) => props.rowKeyFn(row)
+    
+    /**
+     * Render cell content for display in table cells.
+     * Handles different data types and provides consistent formatting.
+     * Returns string representation suitable for table display.
+     */
+    const renderCell = (row, col) => {
+      const value = row[col.key]
+      return value != null ? String(value) : ''
     }
-    if (g) {
-      const hit = props.columns.some(col => String(row[col.key] ?? '').toLowerCase().includes(g))
-      if (!hit) return false
+    
+    /**
+     * Filter rows based on global search query and column-specific queries.
+     * Applies text-based filtering across all columns and individual columns.
+     * Returns filtered dataset for further processing and display.
+     */
+    const filteredRows = computed(() => {
+      let filtered = props.rows
+      
+      // Apply global search filter
+      if (globalQuery.value.trim()) {
+        const query = globalQuery.value.toLowerCase()
+        filtered = filtered.filter(row =>
+          props.columns.some(col => {
+            const value = renderCell(row, col).toLowerCase()
+            return value.includes(query)
+          })
+        )
+      }
+      
+      // Apply column-specific filters
+      props.columns.forEach(col => {
+        const query = columnQueries.value[col.key]
+        if (query && query.trim()) {
+          const searchTerm = query.toLowerCase()
+          filtered = filtered.filter(row => {
+            const value = renderCell(row, col).toLowerCase()
+            return value.includes(searchTerm)
+          })
+        }
+      })
+      
+      return filtered
+    })
+    
+    /**
+     * Sort filtered rows based on current sort configuration.
+     * Applies ascending or descending sort order to specified column.
+     * Returns sorted dataset maintaining filter results.
+     */
+    const sortedRows = computed(() => {
+      if (!sort.value.key) return filteredRows.value
+      
+      return [...filteredRows.value].sort((a, b) => {
+        const aVal = renderCell(a, { key: sort.value.key })
+        const bVal = renderCell(b, { key: sort.value.key })
+        
+        // Handle numeric values
+        const aNum = parseFloat(aVal)
+        const bNum = parseFloat(bVal)
+        if (!isNaN(aNum) && !isNaN(bNum)) {
+          return sort.value.dir === 'asc' ? aNum - bNum : bNum - aNum
+        }
+        
+        // Handle string values
+        const comparison = aVal.localeCompare(bVal)
+        return sort.value.dir === 'asc' ? comparison : -comparison
+      })
+    })
+    
+    /**
+     * Calculate total number of pages based on filtered and sorted data.
+     * Determines pagination range using page size configuration.
+     * Returns total page count for navigation controls.
+     */
+    const totalPages = computed(() => Math.ceil(sortedRows.value.length / props.pageSize))
+    
+    /**
+     * Extract current page data from sorted and filtered results.
+     * Implements pagination by slicing data based on current page.
+     * Returns subset of data for current page display.
+     */
+    const pagedRows = computed(() => {
+      const start = (page.value - 1) * props.pageSize
+      return sortedRows.value.slice(start, start + props.pageSize)
+    })
+    
+    /**
+     * Toggle sorting for a specific column key.
+     * - First click activates ascending order for that column.
+     * - Subsequent clicks alternate between ascending and descending.
+     * - Only one active sort key is maintained at a time.
+     */
+    function toggleSort(key) {
+      if (sort.value.key !== key) {
+        sort.value.key = key
+        sort.value.dir = 'asc'
+      } else {
+        sort.value.dir = sort.value.dir === 'asc' ? 'desc' : 'asc'
+      }
     }
-    return true
-  })
-})
 
-/**
- * Sort the filtered rows.
- * - Sort key and direction are controlled by header clicks.
- * - Handles null values and both numeric and string comparisons.
- * - Produces a new array to preserve referential integrity.
- */
-const sortedRows = computed(() => {
-  if (!sort.key) return filteredRows.value
-  const arr = [...filteredRows.value]
-  const k = sort.key
-  const dir = sort.dir === 'asc' ? 1 : -1
-  arr.sort((a, b) => {
-    const av = a[k]
-    const bv = b[k]
-    if (av == null && bv == null) return 0
-    if (av == null) return -1 * dir
-    if (bv == null) return 1 * dir
-    if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * dir
-    return String(av).localeCompare(String(bv)) * dir
-  })
-  return arr
-})
-
-/**
- * Compute pagination state.
- * - totalPages: ceil of rows / pageSize.
- * - pagedRows: slice of sorted rows for the active page.
- * - Page resets to 1 whenever filters change (watcher above).
- */
-const totalPages = computed(() => Math.ceil(sortedRows.value.length / props.pageSize))
-const pagedRows = computed(() => {
-  const start = (page.value - 1) * props.pageSize
-  return sortedRows.value.slice(start, start + props.pageSize)
-})
-
-/**
- * Toggle sorting for a specific column key.
- * - First click activates ascending order for that column.
- * - Subsequent clicks alternate between ascending and descending.
- * - Only one active sort key is maintained at a time.
- */
-function toggleSort(key) {
-  if (sort.key !== key) {
-    sort.key = key
-    sort.dir = 'asc'
-  } else {
-    sort.dir = sort.dir === 'asc' ? 'desc' : 'asc'
+    return {
+      globalQuery,
+      columnQueries,
+      sort,
+      page,
+      rowKey,
+      renderCell,
+      filteredRows,
+      sortedRows,
+      totalPages,
+      pagedRows,
+      toggleSort
+    }
   }
 }
 </script>
 
 <style scoped>
-.table-wrapper { display: grid; gap: 0.75rem; }
-.toolbar input { width: 100%; padding: 0.5rem; }
-.table { width: 100%; border-collapse: collapse; }
-.table th, .table td { border: 1px solid #e5e7eb; padding: 0.5rem; }
-.th-sort { cursor: pointer; user-select: none; }
-.table thead input { width: 100%; padding: 0.35rem; }
-.pagination { display: flex; gap: 0.5rem; align-items: center; }
+.table-wrapper {
+  display: grid;
+  gap: 1rem;
+}
+
+.toolbar input {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid #ccc;
+}
+
+.table-container {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  border: 1px solid #ddd;
+  padding: 0.5rem;
+  text-align: left;
+}
+
+.table th {
+  background-color: #f8f9fa;
+  font-weight: bold;
+}
+
+.th-sort {
+  cursor: pointer;
+  user-select: none;
+}
+
+.table thead input {
+  width: 100%;
+  padding: 0.25rem;
+  border: 1px solid #ccc;
+}
+
+.pagination {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  justify-content: center;
+}
+
+.pagination button {
+  padding: 0.5rem 1rem;
+  border: 1px solid #ccc;
+  background-color: white;
+  cursor: pointer;
+}
+
+.pagination button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 </style>

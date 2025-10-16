@@ -8,6 +8,7 @@ import Contact from '../views/Contact.vue'
 import { authService } from '../services/auth'
 import { firebaseAuthService } from '../services/firebaseAuth'
 import Tables from '../views/Tables.vue'
+import Map from '../views/Map.vue'
 
 // define routes
 const routes = [
@@ -82,6 +83,11 @@ const routes = [
     path: '/tables',
     name: 'Tables',
     component: Tables
+  },
+  {
+    path: '/map',
+    name: 'Map',
+    component: Map
   }
 ]
 
