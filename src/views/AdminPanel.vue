@@ -23,6 +23,14 @@
             <p>Regular Users</p>
           </div>
         </div>
+        
+        <!-- Interactive Charts Section -->
+        <div class="charts-section">
+          <div class="chart-grid">
+            <UserStatsChart :user-data="allUsers" />
+            <ResourceDistributionChart :resource-data="resources" />
+          </div>
+        </div>
       </div>
       
       <!-- User Management Section -->
@@ -137,12 +145,19 @@ import { ref, onMounted, computed } from 'vue'
 import { authService } from '../services/auth'
 import { emailService } from '../services/emailService'
 import { exportService } from '../services/exportService'
+import UserStatsChart from '../components/UserStatsChart.vue'
+import ResourceDistributionChart from '../components/ResourceDistributionChart.vue'
 
 export default {
   name: 'AdminPanel',
+  components: {
+    UserStatsChart,
+    ResourceDistributionChart
+  },
   setup() {
     const allUsers = ref([])
     const registrationEnabled = ref(true)
+    const resources = ref([])
     
     // Email form data
     const emailForm = ref({
@@ -172,6 +187,35 @@ export default {
       } catch (error) {
         console.error('Error loading users:', error)
         allUsers.value = []
+      }
+    }
+    
+    /**
+     * load resource data from localStorage for chart visualization
+     * retrieves mental health resources for distribution analysis
+     * provides sample data if no resources are stored
+     */
+    const loadResources = () => {
+      try {
+        const storedResources = localStorage.getItem('mentalHealthResources')
+        if (storedResources) {
+          resources.value = JSON.parse(storedResources)
+        } else {
+          // sample data for demonstration
+          resources.value = [
+            { id: 1, title: 'Stress Management', category: 'Coping Strategies' },
+            { id: 2, title: 'Anxiety Support', category: 'Mental Health' },
+            { id: 3, title: 'Depression Resources', category: 'Mental Health' },
+            { id: 4, title: 'Mindfulness Meditation', category: 'Wellness' },
+            { id: 5, title: 'Crisis Hotlines', category: 'Emergency Support' },
+            { id: 6, title: 'Peer Support Groups', category: 'Community' },
+            { id: 7, title: 'Professional Counseling', category: 'Treatment' },
+            { id: 8, title: 'Self-Care Tips', category: 'Wellness' }
+          ]
+        }
+      } catch (error) {
+        console.error('Error loading resources:', error)
+        resources.value = []
       }
     }
     
@@ -346,6 +390,7 @@ export default {
     
     onMounted(() => {
       loadUsers()
+      loadResources()
       const regEnabled = localStorage.getItem('registrationEnabled')
       if (regEnabled !== null) {
         registrationEnabled.value = regEnabled === 'true'
@@ -364,6 +409,8 @@ export default {
       exportUsersPDF,
       clearAllData,
       resetToDefaults,
+      // Chart data
+      resources,
       // Email functionality
       emailForm,
       isSendingEmail,
@@ -421,6 +468,23 @@ export default {
   margin-bottom: 0.5rem;
   color: #007bff;
   font-weight: bold;
+}
+
+.charts-section {
+  margin-top: 2rem;
+}
+
+.chart-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+@media (max-width: 768px) {
+  .chart-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .admin-controls {
