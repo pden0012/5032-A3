@@ -120,14 +120,14 @@ export default {
      */
     const exportUsersCSV = () => {
       try {
-        const success = exportService.exportUsers(users.value)
+        const success = exportService.exportUsers(users.value) // call export service with user data
         if (success) {
-          console.log('Users exported to CSV successfully')
+          console.log('Users exported to CSV successfully') // log success message
         } else {
-          console.error('Failed to export users to CSV')
+          console.error('Failed to export users to CSV') // log failure message
         }
       } catch (error) {
-        console.error('CSV export error:', error)
+        console.error('CSV export error:', error) // log any errors
       }
     }
     

@@ -1,10 +1,14 @@
 <template>
+  <!-- Main map page container -->
   <div class="map-container">
+    <!-- Page title -->
     <h1>Mental Health Resources Map</h1>
     
-    <!-- map controls with search and navigation -->
+    <!-- Map control panel with search and navigation buttons -->
     <div class="map-controls" role="region" aria-label="Map search and navigation controls">
+      <!-- Search input section -->
       <div class="search-section">
+        <!-- Text search input with Enter key support -->
         <input 
           v-model="searchQuery" 
           @keyup.enter="searchByTextGoogle"
@@ -13,39 +17,48 @@
           aria-label="Search for places of interest"
           aria-describedby="search-instructions"
         />
+        <!-- Search button to trigger location search -->
         <button @click="searchByTextGoogle" class="search-btn" aria-label="Search for the entered location">
           Search
         </button>
       </div>
+      <!-- Control buttons for map interactions -->
       <div class="control-buttons">
+        <!-- Get current location button -->
         <button @click="getCurrentLocation" class="control-btn location-btn" aria-label="Get my current location">
           My Location
         </button>
+        <!-- Find nearby mental health support facilities -->
         <button @click="searchNearbyHospitalsGoogle" class="control-btn" aria-label="Find nearby mental health support">
           Support
         </button>
+        <!-- Navigate between markers button -->
         <button @click="navigateLastTwoGoogle" class="control-btn navigate-btn" aria-label="Show navigation routes between markers">
           Navigate
         </button>
+        <!-- Clear all markers and routes -->
         <button @click="clearMarkers" class="control-btn clear-btn" aria-label="Clear all markers and routes">
           Clear All
         </button>
       </div>
     </div>
     
-    <!-- search instructions for screen readers -->
+    <!-- Screen reader instructions for search functionality -->
     <div id="search-instructions" class="sr-only">
       Search for places of interest like landmarks, tourist attractions, or mental health facilities. Press Enter or click Search to find locations on the map.
     </div>
     
-    <!-- mapbox map container -->
+    <!-- Google Maps container element -->
     <div id="map" class="map"></div>
     
-    <!-- route info display -->
+    <!-- Route information display panel -->
     <div v-if="routeInfo" class="route-info">
       <div class="route-details">
+        <!-- Travel mode (driving/walking) -->
         <span class="mode">Mode: {{ routeInfo.mode }}</span>
+        <!-- Route distance -->
         <span class="distance">Distance: {{ routeInfo.distance }}</span>
+        <!-- Estimated travel time -->
         <span class="duration">Time: {{ routeInfo.duration }}</span>
       </div>
     </div>
@@ -391,9 +404,9 @@ export default {
           if (status === window.google.maps.places.PlacesServiceStatus.OK && results && results[0]) {
             const r = results[0]
             const loc = r.geometry.location
-            gMap.setCenter(loc)
-            addGMarker(loc.lng(), loc.lat(), r.name || searchQuery.value, 'poi')
-            nearbyHealthcareGoogle(loc)
+            gMap.setCenter(loc) // center map on search result
+            addGMarker(loc.lng(), loc.lat(), r.name || searchQuery.value, 'poi') // add POI marker
+            nearbyHealthcareGoogle(loc) // automatically find nearby hospitals
           }
         })
       } catch (e) { console.error('searchByTextGoogle error', e) }
@@ -403,34 +416,34 @@ export default {
      * find nearest user marker (non-poi); draw route from that to dest
      */
     const navigateToNearestUser = async (dest) => {
-      let origin = null
+      let origin = null // starting point for navigation
       try {
-        const userPoints = markers.value.filter(m => m.kind !== 'poi')
+        const userPoints = markers.value.filter(m => m.kind !== 'poi') // get user-placed markers only
         if (userPoints.length === 0) {
           // no origin yet: try current location as start
           await new Promise((resolve, reject) => {
-            if (!navigator.geolocation) return reject(new Error('geo not supported'))
+            if (!navigator.geolocation) return reject(new Error('geo not supported')) // check geolocation support
             navigator.geolocation.getCurrentPosition((pos) => {
               if (googleReady.value && gMap) {
-                addGMarker(pos.coords.longitude, pos.coords.latitude, 'Me', 'user')
+                addGMarker(pos.coords.longitude, pos.coords.latitude, 'Me', 'user') // add Google marker
               } else {
-                addMarker(pos.coords.longitude, pos.coords.latitude, 'Me', 'user')
+                addMarker(pos.coords.longitude, pos.coords.latitude, 'Me', 'user') // fallback to regular marker
               }
-              resolve()
-            }, reject, { enableHighAccuracy: true, timeout: 8000, maximumAge: 120000 })
+              resolve() // complete the promise
+            }, reject, { enableHighAccuracy: true, timeout: 8000, maximumAge: 120000 }) // geolocation options
           })
-          origin = markers.value.filter(m => m.kind !== 'poi').slice(-1)[0]
+          origin = markers.value.filter(m => m.kind !== 'poi').slice(-1)[0] // get the last user marker
         } else {
-          origin = userPoints[userPoints.length - 1]
+          origin = userPoints[userPoints.length - 1] // use most recent user point
         }
-        if (!origin) return
+        if (!origin) return // exit if no origin found
         if (googleReady.value) {
-          await drawSingleRouteGoogle(origin, dest)
+          await drawSingleRouteGoogle(origin, dest) // use Google routing
         } else {
-          await drawSingleRoute(origin, dest)
+          await drawSingleRoute(origin, dest) // fallback routing method
         }
       } catch (e) {
-        console.error('navigateToNearestUser error', e)
+        console.error('navigateToNearestUser error', e) // log any errors
       }
     }
     
@@ -441,15 +454,15 @@ export default {
      */
     const removeMarker = (index) => {
       if (mapMarkers.value[index]) {
-        mapMarkers.value[index].remove()
-        mapMarkers.value.splice(index, 1)
+        mapMarkers.value[index].remove() // remove marker from map display
+        mapMarkers.value.splice(index, 1) // remove from markers array
       }
       
-      markers.value.splice(index, 1)
-      updateMarkerNumbers()
+      markers.value.splice(index, 1) // remove from data array
+      updateMarkerNumbers() // renumber remaining markers
       
       if (markers.value.length > 0) {
-        fitMapToMarkers()
+        fitMapToMarkers() // adjust map view to show remaining markers
       }
     }
     

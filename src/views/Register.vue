@@ -207,12 +207,12 @@ const validateUsername = (blur) => {
  * @returns {void} - Function performs validation and updates email error state
  */
 const validateEmail = (blur) => {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/ // standard email validation pattern
   
   if (!emailRegex.test(email.value)) {
-    if (blur) errors.value.email = "Please enter a valid email address"
+    if (blur) errors.value.email = "Please enter a valid email address" // show error on blur event
   } else {
-    errors.value.email = null
+    errors.value.email = null // clear error if email is valid
   }
 }
 
@@ -224,20 +224,20 @@ const validateEmail = (blur) => {
  * @returns {void} - Function performs validation and updates password error state
  */
 const validatePassword = (blur) => {
-  const pwd = password.value
-  let errorMessage = null
+  const pwd = password.value // get current password value
+  let errorMessage = null // initialize error message
   
   if (pwd.length < 6 || pwd.length > 20) {
-    errorMessage = "Password must be between 6-20 characters"
+    errorMessage = "Password must be between 6-20 characters" // check length requirement
   } else if (!/[A-Z]/.test(pwd)) {
-    errorMessage = "Password must contain at least one uppercase letter"
+    errorMessage = "Password must contain at least one uppercase letter" // check uppercase requirement
   } else if (!/[a-z]/.test(pwd)) {
-    errorMessage = "Password must contain at least one lowercase letter"
+    errorMessage = "Password must contain at least one lowercase letter" // check lowercase requirement
   } else if (!/[0-9]/.test(pwd)) {
-    errorMessage = "Password must contain at least one number"
+    errorMessage = "Password must contain at least one number" // check number requirement
   }
   
-  if (blur) errors.value.password = errorMessage
+  if (blur) errors.value.password = errorMessage // set error only on blur event
 }
 
 /**
@@ -263,26 +263,26 @@ const validateConfirmPassword = (blur) => {
  */
 const handleRegister = async () => {
   try {
-    isLoading.value = true
-    errorMessage.value = ''
-    successMessage.value = ''
+    isLoading.value = true // show loading state
+    errorMessage.value = '' // clear previous errors
+    successMessage.value = '' // clear previous success messages
     
     // validate all fields before submission
-    validateUsername(true)
-    validateEmail(true)
-    validatePassword(true)
-    validateConfirmPassword(true)
+    validateUsername(true) // validate username with blur event
+    validateEmail(true) // validate email with blur event
+    validatePassword(true) // validate password with blur event
+    validateConfirmPassword(true) // validate password confirmation with blur event
     
     // check if form is valid after validation
     if (!isFormValid.value) {
-      errorMessage.value = 'Please fix all validation errors'
-      return
+      errorMessage.value = 'Please fix all validation errors' // show validation error
+      return // exit if form is invalid
     }
     
     // sanitize user inputs for security
-    const sanitizedUsername = sanitizeInput(username.value)
-    const sanitizedEmail = sanitizeInput(email.value)
-    const sanitizedPassword = sanitizeInput(password.value)
+    const sanitizedUsername = sanitizeInput(username.value) // clean username input
+    const sanitizedEmail = sanitizeInput(email.value) // clean email input
+    const sanitizedPassword = sanitizeInput(password.value) // clean password input
     
     // attempt registration with firebase auth service
     const user = await firebaseAuthService.registerWithEmail(sanitizedEmail, sanitizedPassword)
@@ -290,11 +290,11 @@ const handleRegister = async () => {
     if (user) {
       // save user role information to localStorage
       const userData = {
-        id: Date.now(),
-        username: sanitizedUsername,
-        email: sanitizedEmail,
-        role: selectedRole.value,
-        createdAt: new Date().toISOString()
+        id: Date.now(), // generate unique user ID
+        username: sanitizedUsername, // store cleaned username
+        email: sanitizedEmail, // store cleaned email
+        role: selectedRole.value, // store selected role
+        createdAt: new Date().toISOString() // store creation timestamp
       }
       
       // get existing users or create new array
@@ -325,25 +325,25 @@ const handleRegister = async () => {
  */
 const loginWithGoogle = async () => {
   try {
-    isLoading.value = true
-    errorMessage.value = ''
+    isLoading.value = true // show loading state
+    errorMessage.value = '' // clear previous errors
     
     // attempt Google login through firebase auth
-    const user = await firebaseAuthService.loginWithGoogle()
+    const user = await firebaseAuthService.loginWithGoogle() // initiate Google OAuth flow
     
     if (user) {
-      successMessage.value = 'Google registration successful!'
+      successMessage.value = 'Google registration successful!' // show success message
       
       // redirect to home page after successful registration
       setTimeout(() => {
-        router.push('/')
-      }, 1000)
+        router.push('/') // navigate to home page
+      }, 1000) // delay for user to see success message
     }
   } catch (error) {
-    console.error('Google registration error:', error)
-    errorMessage.value = 'Google registration failed. Please try again.'
+    console.error('Google registration error:', error) // log error details
+    errorMessage.value = 'Google registration failed. Please try again.' // show error message
   } finally {
-    isLoading.value = false
+    isLoading.value = false // clear loading state
   }
 }
 

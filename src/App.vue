@@ -1,11 +1,14 @@
 <template>
+  <!-- Main application container -->
   <div id="app">
-    <!-- skip navigation link for screen readers -->
+    <!-- Skip navigation link for screen readers and keyboard users -->
     <a href="#main-content" class="skip-link">Skip to main content</a>
     
-    <!-- main navigation bar here -->
+    <!-- Main navigation bar with responsive mobile menu -->
     <nav class="navbar" role="navigation" aria-label="Main navigation">
+      <!-- Brand/logo section -->
       <div class="nav-brand">Youth Mental Health</div>
+      <!-- Mobile menu toggle button with hamburger icon -->
       <button 
         class="mobile-menu-toggle" 
         @click="toggleMobileMenu" 
@@ -13,41 +16,43 @@
         :aria-expanded="mobileMenuOpen"
         aria-label="Toggle mobile menu"
       >
+        <!-- Hamburger menu icon spans -->
         <span aria-hidden="true"></span>
         <span aria-hidden="true"></span>
         <span aria-hidden="true"></span>
       </button>
+      <!-- Navigation links container with mobile responsive classes -->
       <div class="nav-links" :class="{ active: mobileMenuOpen }">
+        <!-- Main navigation links -->
         <a href="#" @click.prevent="navigateTo('/')">Home</a>
         <a href="#" @click.prevent="navigateTo('/tables')">Tables</a>
         <a href="#" @click.prevent="navigateTo('/map')">Map</a>
         <a href="#" @click.prevent="navigateTo('/contact')">Contact</a>
         
-        <!-- show login/register when user is not logged in -->
-        <!-- 用户未登录时显示登录/注册链接 -->
+        <!-- Authentication-based navigation -->
+        <!-- Show login/register when user is not logged in -->
         <template v-if="!isAuthenticated">
           <a href="#" @click.prevent="navigateTo('/login')">Login</a>
-          <!-- this is for the register page -->
           <a href="#" @click.prevent="navigateTo('/register')">Register</a>
         </template>
         
-        <!-- show user info and logout when user is logged in -->
-        <!-- 用户已登录时显示用户信息和登出按钮 -->
+        <!-- Show user info and logout when user is logged in -->
         <template v-else>
+          <!-- Welcome message with username -->
           <span class="user-welcome">Welcome, {{ currentUser.username }}!</span>
           
-          <!-- show admin-only navigation items -->
-          <!-- 显示仅管理员可见的导航项 -->
+          <!-- Admin-only navigation items -->
           <template v-if="isAdmin">
             <a href="#" @click.prevent="navigateTo('/admin')" class="admin-link">Admin Panel</a>
           </template>
           
+          <!-- Logout button -->
           <button @click="handleLogout" class="logout-button">Logout</button>
         </template>
       </div>
     </nav>
     
-    <!-- main content area -->
+    <!-- Main content area with router view -->
     <main id="main-content" class="main-content" role="main" tabindex="-1">
       <router-view />
     </main>

@@ -1,19 +1,22 @@
 <template>
+  <!-- Login page container -->
   <div class="login">
+    <!-- Page title -->
     <h2>Login</h2>
     
-    <!-- error message display -->
+    <!-- Error message display with accessibility attributes -->
     <div v-if="errorMessage" id="error-message" class="error-message" role="alert" aria-live="polite">
       {{ errorMessage }}
     </div>
     
-    <!-- success message display -->
+    <!-- Success message display -->
     <div v-if="successMessage" class="success-message">
       {{ successMessage }}
     </div>
     
-    <!-- login form -->
+    <!-- Email/password login form with prevent default submission -->
     <form @submit.prevent="handleLogin" role="form" aria-label="Login form">
+      <!-- Email input field -->
       <div class="form-group">
         <label for="username">Email:</label>
         <input 
@@ -24,6 +27,7 @@
         />
       </div>
       
+      <!-- Password input field -->
       <div class="form-group">
         <label for="password">Password:</label>
         <input 
@@ -34,17 +38,18 @@
         />
       </div>
       
+      <!-- Submit button with loading state and accessibility -->
       <button type="submit" :disabled="isLoading" :aria-describedby="errorMessage ? 'error-message' : ''">
         {{ isLoading ? 'Logging in...' : 'Login' }}
       </button>
     </form>
     
-    <!-- form divider -->
+    <!-- Visual divider between login methods -->
     <div class="form-divider">
       <span>or</span>
     </div>
     
-    <!-- Google login button -->
+    <!-- Google OAuth login button -->
     <button 
       @click="loginWithGoogle" 
       :disabled="isLoading"
@@ -120,28 +125,28 @@ const router = useRouter()
  */
 const handleLogin = async () => {
   try {
-    isLoading.value = true
-    errorMessage.value = ''
-    successMessage.value = ''
+    isLoading.value = true // show loading state
+    errorMessage.value = '' // clear previous errors
+    successMessage.value = '' // clear previous success messages
     
     // sanitize user inputs for security
-    const sanitizedUsername = sanitizeInput(formData.value.username)
-    const sanitizedPassword = sanitizeInput(formData.value.password)
+    const sanitizedUsername = sanitizeInput(formData.value.username) // clean email input
+    const sanitizedPassword = sanitizeInput(formData.value.password) // clean password input
     
     // attempt login with firebase auth service (expects email as first arg)
     const result = await firebaseAuthService.loginWithEmail(sanitizedUsername, sanitizedPassword)
     
     if (result && result.success) {
-      successMessage.value = 'Login successful!'
+      successMessage.value = 'Login successful!' // show success feedback
       // proactively notify app to refresh auth/role state (avoid needing manual refresh)
       window.dispatchEvent(new CustomEvent('authStateChanged'))
       
       // redirect to home page after successful login
       setTimeout(() => {
-        router.push('/')
-      }, 1000)
+        router.push('/') // navigate to home page
+      }, 1000) // delay for user to see success message
     } else {
-      errorMessage.value = (result && result.message) || 'Invalid email or password'
+      errorMessage.value = (result && result.message) || 'Invalid email or password' // show error message
     }
   } catch (error) {
     console.error('Login error:', error)

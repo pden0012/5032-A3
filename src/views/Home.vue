@@ -297,14 +297,14 @@ export default {
             maxId = resources.value[i].id
           }
         }
-        const newId = maxId + 1
+        const newId = maxId + 1 // generate unique ID for new resource
         const resource = {
           id: newId,
           title: sanitizedTitle,
           description: sanitizedDescription,
           category: sanitizedCategory
         }
-        resources.value.push(resource)
+        resources.value.push(resource) // add to the resources array
         
         // clear the form after successful addition
         newResource.value = {
