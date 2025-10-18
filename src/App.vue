@@ -129,6 +129,20 @@ export default {
     // 与authService同步的响应式认证状态
     const currentUser = ref(null)
     const isAuthenticated = ref(false)
+    const userRole = ref('user') // reactive role resolved from localStorage
+
+    // helper to resolve role from localStorage by email
+    const resolveRoleFromStorage = (email) => {
+      try {
+        const usersRaw = localStorage.getItem('users')
+        if (!usersRaw || !email) return 'user'
+        const usersList = JSON.parse(usersRaw)
+        const matched = usersList.find(u => (u.email || '').toLowerCase() === email.toLowerCase())
+        return matched && matched.role ? String(matched.role).toLowerCase() : 'user'
+      } catch {
+        return 'user'
+      }
+    }
     
     // function to update auth state from both authService and firebaseAuthService
     // 从authService和firebaseAuthService更新认证状态的函数
@@ -144,11 +158,14 @@ export default {
           id: firebaseUser.uid
         }
         isAuthenticated.value = true
+        // update role from storage immediately for reactive UI
+        userRole.value = resolveRoleFromStorage(firebaseUser.email)
         console.log('Firebase user authenticated:', currentUser.value) // debug log
       } else {
         // Fallback to local auth service
         currentUser.value = authService.getCurrentUser()
         isAuthenticated.value = authService.isLoggedIn()
+        userRole.value = currentUser.value && currentUser.value.role ? String(currentUser.value.role).toLowerCase() : 'user'
         console.log('Local auth user:', currentUser.value) // debug log
       }
       
@@ -160,18 +177,35 @@ export default {
     const isAdmin = computed(() => {
       if (!currentUser.value) return false
       
-      // Check if Firebase user is admin (you can customize this logic)
-      // 检查Firebase用户是否为管理员（可以自定义此逻辑）
-      if (currentUser.value.email) {
-        // For demo purposes, admin emails end with @admin.com
-        // 演示目的：管理员邮箱以@admin.com结尾
-        return currentUser.value.email.endsWith('@admin.com') || 
-               currentUser.value.email.includes('admin')
+      // Highest priority: role resolved reactively
+      if (userRole.value) {
+        return userRole.value === 'admin'
       }
       
-      // Fallback to local auth service admin check
-      // 回退到本地认证服务的管理员检查
-      return authService.isAdmin()
+      // Primary rule: honor the role selected at registration time
+      // 从本地存储的 users 列表中查找当前邮箱并读取角色
+      try {
+        const usersRaw = localStorage.getItem('users')
+        if (usersRaw && currentUser.value.email) {
+          const usersList = JSON.parse(usersRaw)
+          const matched = usersList.find(u => (u.email || '').toLowerCase() === currentUser.value.email.toLowerCase())
+          if (matched && matched.role) {
+            return String(matched.role).toLowerCase() === 'admin'
+          }
+        }
+      } catch (e) {
+        console.warn('Role lookup failed:', e)
+      }
+      
+      // Fallback 1: local auth service role check
+      if (authService.isAdmin && authService.isAdmin()) return true
+      
+      // Fallback 2: legacy email-based heuristic (kept for backward compatibility)
+      if (currentUser.value.email) {
+        return currentUser.value.email.endsWith('@admin.com') || currentUser.value.email.includes('admin')
+      }
+      
+      return false
     })
     
     // check authentication status when app starts

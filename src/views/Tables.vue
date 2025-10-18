@@ -29,6 +29,16 @@
       <div class="table-header">
         <h2>Reviews Table</h2>
         <div class="export-buttons">
+          <!-- quick http test: load reviews by resource id -->
+          <input 
+            type="number" 
+            v-model.number="testResourceId" 
+            placeholder="Resource ID" 
+            aria-label="Resource id to load reviews"
+            style="width:140px; padding:0.3rem; border:1px solid #ccc"/>
+          <button @click="loadReviews" class="export-btn" aria-label="Load reviews by resource id">
+            Load Reviews
+          </button>
           <button @click="exportReviewsCSV" class="export-btn" aria-label="Export reviews data as CSV file">
             Export CSV
           </button>
@@ -52,6 +62,7 @@ import { ref, onMounted } from 'vue'
 import DataTable from '../components/DataTable.vue'
 import tablesData from '../data/tablesData.json'
 import { exportService } from '../services/exportService'
+import { fetchReviews } from '../services/reviewService'
 
 export default {
   name: 'Tables',
@@ -94,6 +105,8 @@ export default {
      * - Each row uses keys defined by reviewCols.
      */
     const reviews = ref(tablesData.reviews)
+    // http test state for loading from cloud function
+    const testResourceId = ref(null)
 
     /**
      * component initialization and setup
@@ -193,6 +206,24 @@ export default {
       }
     }
     
+    // simple loader that calls HTTP function and fills the reviews table
+    const loadReviews = async () => {
+      try {
+        if (testResourceId.value == null || testResourceId.value === '') return
+        const data = await fetchReviews(testResourceId.value)
+        // map to table rows (keep columns simple)
+        reviews.value = data.reviews.map((r, idx) => ({
+          id: idx + 1,
+          title: `Resource ${r.resourceId}`,
+          category: 'N/A', // no category in http payload
+          rating: r.rating ?? '-',
+          reviewer: r.userId ?? '-'
+        }))
+      } catch (e) {
+        console.error('Load reviews error:', e)
+      }
+    }
+
     onMounted(() => {
       console.log('Tables component mounted successfully')
     })
@@ -202,6 +233,8 @@ export default {
       users,
       reviewCols,
       reviews,
+      testResourceId,
+      loadReviews,
       exportUsersCSV,
       exportUsersPDF,
       exportReviewsCSV,

@@ -9,7 +9,8 @@ import {
   onAuthStateChanged,
   updateProfile
 } from 'firebase/auth'
-import { auth } from '../config/firebase'
+import { auth, db } from '../config/firebase'
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
 
 // setting up Google as a login provider
 // this tells Firebase we want to use Google for signing in
@@ -23,7 +24,7 @@ googleProvider.addScope('profile')
 class FirebaseAuthService {
   // this function lets users register with email and password
   // it's like creating a new account the traditional way
-  async registerWithEmail(email, password, username) {
+  async registerWithEmail(email, password, username, role = 'user') {
     try {
       // create a new user account with Firebase
       // this is where the magic happens - Firebase creates the account
@@ -35,6 +36,35 @@ class FirebaseAuthService {
       await updateProfile(user, {
         displayName: username
       })
+      
+      // save user data to Firestore database
+      // this creates a user profile in our database for admin panel
+      await setDoc(doc(db, 'users', user.uid), {
+        uid: user.uid,
+        email: email,
+        username: username,
+        role: role,
+        createdAt: serverTimestamp(),
+        lastLoginAt: serverTimestamp(),
+        provider: 'email',
+        emailVerified: user.emailVerified
+      })
+      
+      // also save to localStorage for backward compatibility
+      const userData = {
+        id: user.uid,
+        uid: user.uid,
+        email: email,
+        username: username,
+        role: role,
+        createdAt: new Date().toISOString(),
+        registeredAt: new Date().toISOString()
+      }
+      
+      // get existing users and add new one
+      const existingUsers = JSON.parse(localStorage.getItem('users') || '[]')
+      existingUsers.push(userData)
+      localStorage.setItem('users', JSON.stringify(existingUsers))
       
       // return success message and user info
       // this tells our app that everything worked out fine
@@ -96,6 +126,47 @@ class FirebaseAuthService {
       const result = await signInWithPopup(auth, googleProvider)
       const user = result.user
       
+      // check if this is a new user (first time login)
+      // if it's a new user, save their data to Firestore
+      if (result._tokenResponse?.isNewUser) {
+        const username = user.displayName || user.email?.split('@')[0] || 'Google User'
+        const role = user.email?.includes('admin') ? 'admin' : 'user'
+        
+        // save new user data to Firestore
+        await setDoc(doc(db, 'users', user.uid), {
+          uid: user.uid,
+          email: user.email,
+          username: username,
+          role: role,
+          createdAt: serverTimestamp(),
+          lastLoginAt: serverTimestamp(),
+          provider: 'google',
+          emailVerified: user.emailVerified,
+          photoURL: user.photoURL
+        })
+        
+        // also save to localStorage for backward compatibility
+        const userData = {
+          id: user.uid,
+          uid: user.uid,
+          email: user.email,
+          username: username,
+          role: role,
+          createdAt: new Date().toISOString(),
+          registeredAt: new Date().toISOString()
+        }
+        
+        // get existing users and add new one
+        const existingUsers = JSON.parse(localStorage.getItem('users') || '[]')
+        existingUsers.push(userData)
+        localStorage.setItem('users', JSON.stringify(existingUsers))
+      } else {
+        // existing user - update last login time
+        await setDoc(doc(db, 'users', user.uid), {
+          lastLoginAt: serverTimestamp()
+        }, { merge: true })
+      }
+      
       // if Google login works, return the user info
       // now they're logged in with their Google account
       return {
@@ -154,27 +225,27 @@ class FirebaseAuthService {
     // this makes the app more user-friendly instead of showing scary technical errors
     switch (errorCode) {
       case 'auth/user-not-found':
-        return '用户不存在'
+        return 'User not found'
       case 'auth/wrong-password':
-        return '密码错误'
+        return 'Incorrect password'
       case 'auth/email-already-in-use':
-        return '邮箱已被使用'
+        return 'Email is already in use'
       case 'auth/weak-password':
-        return '密码强度不够'
+        return 'Password is too weak'
       case 'auth/invalid-email':
-        return '邮箱格式无效'
+        return 'Invalid email format'
       case 'auth/user-disabled':
-        return '用户已被禁用'
+        return 'User account is disabled'
       case 'auth/too-many-requests':
-        return '请求过于频繁，请稍后再试'
+        return 'Too many requests, please try again later'
       case 'auth/operation-not-allowed':
-        return '操作不被允许'
+        return 'Operation not allowed'
       case 'auth/popup-closed-by-user':
-        return '登录窗口被用户关闭'
+        return 'Login popup was closed by the user'
       case 'auth/cancelled-popup-request':
-        return '登录请求被取消'
+        return 'Login request was cancelled'
       default:
-        return '认证失败，请重试'
+        return 'Authentication failed, please try again'
     }
   }
 }

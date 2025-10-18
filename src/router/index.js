@@ -44,16 +44,26 @@ const routes = [
       const isAuthenticated = firebaseUser || (authService.isLoggedIn() && localUser)
       
       if (isAuthenticated) {
-        // check admin status - prioritize Firebase user
-        // 检查管理员状态 - 优先检查Firebase用户
+        // check admin status - prioritize role selected at registration time
+        // 优先基于注册时选择的角色来判断是否为管理员
         let isAdmin = false
-        
-        if (firebaseUser) {
-          // Firebase user admin check (email contains 'admin')
-          // Firebase用户管理员检查（邮箱包含'admin'）
-          isAdmin = firebaseUser.email && 
-                   (firebaseUser.email.endsWith('@admin.com') || 
-                    firebaseUser.email.includes('admin'))
+
+        // helper: resolve role from localStorage users list by email
+        const resolveRoleFromStorage = (email) => {
+          try {
+            const usersRaw = localStorage.getItem('users')
+            if (!usersRaw || !email) return 'user'
+            const usersList = JSON.parse(usersRaw)
+            const matched = usersList.find(u => (u.email || '').toLowerCase() === email.toLowerCase())
+            return matched && matched.role ? String(matched.role).toLowerCase() : 'user'
+          } catch {
+            return 'user'
+          }
+        }
+
+        if (firebaseUser && firebaseUser.email) {
+          const role = resolveRoleFromStorage(firebaseUser.email)
+          isAdmin = role === 'admin'
         } else if (localUser) {
           // Local auth user admin check
           // 本地认证用户管理员检查

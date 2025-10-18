@@ -15,7 +15,7 @@
     <!-- login form -->
     <form @submit.prevent="handleLogin" role="form" aria-label="Login form">
       <div class="form-group">
-        <label for="username">Username:</label>
+        <label for="username">Email:</label>
         <input 
           type="text" 
           id="username" 
@@ -128,18 +128,20 @@ const handleLogin = async () => {
     const sanitizedUsername = sanitizeInput(formData.value.username)
     const sanitizedPassword = sanitizeInput(formData.value.password)
     
-    // attempt login with firebase auth service
-    const user = await firebaseAuthService.loginWithEmail(sanitizedUsername, sanitizedPassword)
+    // attempt login with firebase auth service (expects email as first arg)
+    const result = await firebaseAuthService.loginWithEmail(sanitizedUsername, sanitizedPassword)
     
-    if (user) {
+    if (result && result.success) {
       successMessage.value = 'Login successful!'
+      // proactively notify app to refresh auth/role state (avoid needing manual refresh)
+      window.dispatchEvent(new CustomEvent('authStateChanged'))
       
       // redirect to home page after successful login
       setTimeout(() => {
         router.push('/')
       }, 1000)
     } else {
-      errorMessage.value = 'Invalid username or password'
+      errorMessage.value = (result && result.message) || 'Invalid email or password'
     }
   } catch (error) {
     console.error('Login error:', error)
@@ -165,6 +167,8 @@ const loginWithGoogle = async () => {
     
     if (user) {
       successMessage.value = 'Google login successful!'
+      // proactively notify app to refresh auth/role state
+      window.dispatchEvent(new CustomEvent('authStateChanged'))
       
       // redirect to home page after successful login
       setTimeout(() => {

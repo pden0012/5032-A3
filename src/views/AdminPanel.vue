@@ -29,6 +29,7 @@
           <div class="chart-grid">
             <UserStatsChart :user-data="allUsers" />
             <ResourceDistributionChart :resource-data="resources" />
+            <ReviewStatsChart />
           </div>
         </div>
       </div>
@@ -36,22 +37,6 @@
       <!-- User Management Section -->
       <div class="admin-section">
         <h2>User Management</h2>
-        <div class="admin-controls">
-          <button 
-            @click="toggleRegistration" 
-            :class="['toggle-btn', registrationEnabled ? 'enabled' : 'disabled']"
-          >
-            {{ registrationEnabled ? 'Disable' : 'Enable' }} Registration
-          </button>
-          <button @click="exportUsersCSV" class="export-btn" aria-label="Export users data as CSV file">
-            Export Users (CSV)
-          </button>
-          <button @click="exportUsersPDF" class="export-btn" aria-label="Export users data as PDF file">
-            Export Users (PDF)
-          </button>
-          <button @click="clearAllData" class="danger-btn">Clear All Data</button>
-          <button @click="resetToDefaults" class="reset-btn">Reset to Defaults</button>
-        </div>
         
         <div class="users-table">
           <table>
@@ -81,61 +66,6 @@
         </div>
       </div>
       
-      <!-- Email Management Section -->
-      <div class="admin-section">
-        <h2>Send Email</h2>
-        
-        <div v-if="emailMessage" :class="['email-status', emailMessage.success ? 'success' : 'error']">
-          {{ emailMessage.text }}
-        </div>
-        
-        <form @submit.prevent="sendEmail">
-          <div class="form-row">
-            <div class="form-group">
-              <label for="to">To:</label>
-              <input 
-                type="email" 
-                id="to" 
-                v-model="emailForm.to" 
-                required 
-              />
-            </div>
-            <div class="form-group">
-              <label for="subject">Subject:</label>
-              <input 
-                type="text" 
-                id="subject" 
-                v-model="emailForm.subject" 
-                required 
-              />
-            </div>
-          </div>
-          
-          <div class="form-group">
-            <label for="text">Message:</label>
-            <textarea 
-              id="text" 
-              v-model="emailForm.text" 
-              rows="5" 
-              required
-            ></textarea>
-          </div>
-          
-          <div class="form-group">
-            <label for="attachment">Attachment (optional):</label>
-            <input 
-              type="file" 
-              id="attachment" 
-              ref="fileInput"
-              @change="handleFileSelect" 
-            />
-          </div>
-          
-          <button type="submit" :disabled="isSendingEmail" class="send-btn">
-            {{ isSendingEmail ? 'Sending...' : 'Send Email' }}
-          </button>
-        </form>
-      </div>
     </div>
   </div>
 </template>
@@ -143,52 +73,108 @@
 <script>
 import { ref, onMounted, computed } from 'vue'
 import { authService } from '../services/auth'
-import { emailService } from '../services/emailService'
-import { exportService } from '../services/exportService'
+import { getFirestore, collection, getDocs, query, orderBy } from 'firebase/firestore'
 import UserStatsChart from '../components/UserStatsChart.vue'
 import ResourceDistributionChart from '../components/ResourceDistributionChart.vue'
+import ReviewStatsChart from '../components/ReviewStatsChart.vue'
 
 export default {
   name: 'AdminPanel',
   components: {
     UserStatsChart,
-    ResourceDistributionChart
+    ResourceDistributionChart,
+    ReviewStatsChart
   },
   setup() {
     const allUsers = ref([])
-    const registrationEnabled = ref(true)
     const resources = ref([])
     
-    // Email form data
-    const emailForm = ref({
-      to: '',
-      subject: '',
-      text: '',
-      attachment: null
-    })
-    const isSendingEmail = ref(false)
-    const emailMessage = ref(null)
-    const fileInput = ref(null)
-    
     /**
-     * Load all users from local storage and populate the users array.
-     * Retrieves user data from browser localStorage and parses JSON format.
-     * Initializes empty array if no users exist in storage.
+     * Load all users from Firestore database.
+     * Retrieves user data from Firestore users collection.
+     * Falls back to localStorage if Firestore access fails.
      * Updates reactive users list for display in admin interface.
      */
-    const loadUsers = () => {
+    const loadUsers = async () => {
+      try {
+        const db = getFirestore()
+        
+        // Get users from Firestore users collection
+        const usersSnapshot = await getDocs(query(collection(db, 'users'), orderBy('createdAt', 'desc')))
+        const firestoreUsers = []
+        
+        usersSnapshot.forEach((doc) => {
+          const userData = doc.data()
+          firestoreUsers.push({
+            id: doc.id,
+            uid: userData.uid || doc.id,
+            email: userData.email || 'Unknown',
+            username: userData.username || userData.email?.split('@')[0] || 'Unknown',
+            role: userData.role || 'user',
+            createdAt: userData.createdAt?.toDate?.() || userData.createdAt || new Date(),
+            registeredAt: userData.createdAt?.toDate?.() || userData.createdAt || new Date(),
+            lastLoginAt: userData.lastLoginAt?.toDate?.() || userData.lastLoginAt,
+            provider: userData.provider || 'unknown',
+            emailVerified: userData.emailVerified || false
+          })
+        })
+        
+        if (firestoreUsers.length > 0) {
+          allUsers.value = firestoreUsers
+          console.log(`✅ Loaded ${allUsers.value.length} users from Firestore`)
+        } else {
+          console.warn('No users found in Firestore, falling back to localStorage')
+          loadUsersFromLocalStorage()
+        }
+        
+      } catch (error) {
+        console.warn('Firestore access failed, falling back to localStorage:', error.message)
+        loadUsersFromLocalStorage()
+      }
+    }
+    
+    /**
+     * Load users from localStorage as fallback method
+     * Handles deduplication and data formatting for admin panel display
+     */
+    const loadUsersFromLocalStorage = () => {
       try {
         const usersData = localStorage.getItem('users')
-        if (usersData) {
-          allUsers.value = JSON.parse(usersData)
-        } else {
-          allUsers.value = []
+        const parsed = usersData ? JSON.parse(usersData) : []
+        
+        // de-duplicate by email, keep latest createdAt
+        const emailToUser = new Map()
+        for (const u of parsed) {
+          const key = (u.email || '').toLowerCase()
+          const existing = emailToUser.get(key)
+          if (!existing) {
+            emailToUser.set(key, u)
+          } else {
+            const existingTs = new Date(existing.createdAt || 0).getTime()
+            const currentTs = new Date(u.createdAt || 0).getTime()
+            if (currentTs >= existingTs) emailToUser.set(key, u)
+          }
         }
+        
+        // Format data for consistency
+        const formattedUsers = Array.from(emailToUser.values()).map(user => ({
+          id: user.id || user.uid || Date.now().toString(),
+          uid: user.uid || user.id || Date.now().toString(),
+          email: user.email || 'Unknown',
+          username: user.username || user.email?.split('@')[0] || 'Unknown',
+          role: user.role || 'user',
+          createdAt: user.createdAt || user.created_at,
+          registeredAt: user.createdAt || user.created_at || 'Unknown'
+        }))
+        
+        allUsers.value = formattedUsers
+        console.log(`📱 Loaded ${allUsers.value.length} users from localStorage (fallback)`)
       } catch (error) {
-        console.error('Error loading users:', error)
+        console.error('Failed to load users from localStorage:', error)
         allUsers.value = []
       }
     }
+    
     
     /**
      * load resource data from localStorage for chart visualization
@@ -227,197 +213,46 @@ export default {
      */
     const formatDate = (dateString) => {
       try {
-        return new Date(dateString).toLocaleDateString()
+        if (!dateString || dateString === 'Unknown') {
+          return 'Unknown'
+        }
+        
+        const date = new Date(dateString)
+        
+        // Check if date is valid
+        if (isNaN(date.getTime())) {
+          return 'Unknown'
+        }
+        
+        return date.toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric'
+        })
       } catch (error) {
         return 'Unknown'
       }
     }
     
-    /**
-     * Toggle user registration status between enabled and disabled states.
-     * Updates registration setting in localStorage for persistence.
-     * Provides visual feedback for current registration status.
-     * Controls whether new users can register accounts.
-     */
-    const toggleRegistration = () => {
-      registrationEnabled.value = !registrationEnabled.value
-      localStorage.setItem('registrationEnabled', registrationEnabled.value.toString())
-    }
     
-    /**
-     * Export all user data to downloadable JSON file.
-     * Creates downloadable file containing complete user database.
-     * Generates timestamped filename for easy identification.
-     * Triggers browser download with user data export.
-     */
-    const exportUsersCSV = () => {
-      try {
-        const success = exportService.exportUsers(allUsers.value)
-        if (success) {
-          console.log('Users exported to CSV successfully')
-        } else {
-          console.error('Failed to export users to CSV')
-        }
-      } catch (error) {
-        console.error('CSV export error:', error)
-      }
-    }
-    
-    const exportUsersPDF = () => {
-      try {
-        const columns = [
-          { key: 'id', label: 'ID' },
-          { key: 'username', label: 'Username' },
-          { key: 'email', label: 'Email' },
-          { key: 'role', label: 'Role' }
-        ]
-        
-        const timestamp = new Date().toISOString().split('T')[0]
-        const filename = `users_export_${timestamp}.pdf`
-        
-        const success = exportService.exportToPDF(allUsers.value, columns, filename)
-        if (success) {
-          console.log('Users exported to PDF successfully')
-        } else {
-          console.error('Failed to export users to PDF')
-        }
-      } catch (error) {
-        console.error('PDF export error:', error)
-      }
-    }
-    
-    /**
-     * Clear all user data and reset system to empty state.
-     * Removes all users from localStorage and resets user array.
-     * Provides destructive action confirmation for data safety.
-     * Restores system to initial empty user state.
-     */
-    const clearAllData = () => {
-      if (confirm('Are you sure you want to clear all user data? This action cannot be undone.')) {
-        localStorage.removeItem('users')
-        allUsers.value = []
-        alert('All user data has been cleared.')
-      }
-    }
-    
-    /**
-     * Reset system to default configuration and sample data.
-     * Restores default admin user and system settings.
-     * Creates sample user data for testing and demonstration.
-     * Reinitializes system with default configuration values.
-     */
-    const resetToDefaults = () => {
-      if (confirm('Are you sure you want to reset to defaults? This will create sample data.')) {
-        const defaultUsers = [
-          {
-            id: 1,
-            username: 'admin',
-            email: 'admin@example.com',
-            role: 'Admin',
-            registeredAt: new Date().toISOString()
-          },
-          {
-            id: 2,
-            username: 'user1',
-            email: 'user1@example.com',
-            role: 'User',
-            registeredAt: new Date().toISOString()
-          }
-        ]
-        localStorage.setItem('users', JSON.stringify(defaultUsers))
-        allUsers.value = defaultUsers
-        registrationEnabled.value = true
-        localStorage.setItem('registrationEnabled', 'true')
-        alert('System has been reset to defaults.')
-      }
-    }
-    
-    /**
-     * Handle file selection and convert to attachment format.
-     * Processes selected file and converts to base64 for email attachment.
-     * Stores attachment data for email sending functionality.
-     * Provides error handling for file processing failures.
-     */
-    const handleFileSelect = async (event) => {
-      const file = event.target.files[0]
-      if (file) {
-        try {
-          emailForm.value.attachment = await emailService.fileToAttachment(file)
-        } catch (error) {
-          emailMessage.value = { success: false, text: 'Failed to process file' }
-        }
-      }
-    }
-    
-    /**
-     * Send email through configured email service.
-     * Processes email form data and sends via email service.
-     * Handles attachment inclusion and success/failure feedback.
-     * Clears form on successful sending and shows status message.
-     */
-    const sendEmail = async () => {
-      isSendingEmail.value = true
-      emailMessage.value = null
-      
-      try {
-        const attachments = emailForm.value.attachment ? [emailForm.value.attachment] : []
-        const result = await emailService.sendEmail(
-          emailForm.value.to,
-          emailForm.value.subject,
-          emailForm.value.text,
-          attachments
-        )
-        
-        emailMessage.value = result
-        if (result.success) {
-          // Clear form after successful sending
-          emailForm.value = { to: '', subject: '', text: '', attachment: null }
-          if (fileInput.value) {
-            fileInput.value.value = ''
-          }
-        }
-      } catch (error) {
-        emailMessage.value = { success: false, text: 'Failed to send email' }
-      } finally {
-        isSendingEmail.value = false
-      }
-    }
-    
-    // Computed properties for statistics
+    // computed properties for user statistics
     const totalUsers = computed(() => allUsers.value.length)
-    const adminUsers = computed(() => allUsers.value.filter(user => user.role === 'Admin').length)
-    const regularUsers = computed(() => allUsers.value.filter(user => user.role === 'User').length)
+    const adminUsers = computed(() => allUsers.value.filter(user => user.role === 'admin').length)
+    const regularUsers = computed(() => allUsers.value.filter(user => user.role === 'user').length)
     
-    onMounted(() => {
-      loadUsers()
+    // load data on component mount
+    onMounted(async () => {
+      await loadUsers()
       loadResources()
-      const regEnabled = localStorage.getItem('registrationEnabled')
-      if (regEnabled !== null) {
-        registrationEnabled.value = regEnabled === 'true'
-      }
     })
-
+    
     return {
       allUsers,
-      registrationEnabled,
+      resources,
       totalUsers,
       adminUsers,
       regularUsers,
-      formatDate,
-      toggleRegistration,
-      exportUsersCSV,
-      exportUsersPDF,
-      clearAllData,
-      resetToDefaults,
-      // Chart data
-      resources,
-      // Email functionality
-      emailForm,
-      isSendingEmail,
-      emailMessage,
-      fileInput,
-      handleFileSelect,
-      sendEmail
+      formatDate
     }
   }
 }
@@ -431,99 +266,61 @@ export default {
 }
 
 .admin-header {
+  margin-bottom: 1rem;
   text-align: center;
-  margin-bottom: 2rem;
-  padding: 1rem;
-  background-color: #333;
-  color: white;
+}
+
+.admin-header h1 {
+  margin-bottom: 0.5rem;
 }
 
 .admin-content {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 1rem;
 }
 
 .admin-section {
-  background-color: white;
+  background: white;
   padding: 1rem;
   border: 1px solid #ddd;
 }
 
+.admin-section h2 {
+  margin-bottom: 1rem;
+  border-bottom: 1px solid #ccc;
+  padding-bottom: 0.5rem;
+}
+
 .user-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  display: flex;
   gap: 1rem;
   margin-bottom: 1rem;
 }
 
 .stat-card {
   text-align: center;
-  padding: 1rem;
-  background-color: #f8f9fa;
-  border: 1px solid #ddd;
+  padding: 0.5rem;
+  border: 1px solid #ccc;
+  flex: 1;
 }
 
 .stat-number {
-  font-size: 2rem;
-  margin-bottom: 0.5rem;
-  color: #007bff;
+  font-size: 1.5rem;
+  margin-bottom: 0.25rem;
   font-weight: bold;
 }
 
 .charts-section {
-  margin-top: 2rem;
-}
-
-.chart-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
   margin-top: 1rem;
 }
 
-@media (max-width: 768px) {
-  .chart-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-.admin-controls {
+.chart-grid {
   display: flex;
+  flex-direction: column;
   gap: 1rem;
-  margin-bottom: 1rem;
-  flex-wrap: wrap;
 }
 
-.toggle-btn, .export-btn, .danger-btn, .reset-btn {
-  padding: 0.5rem 1rem;
-  border: none;
-  cursor: pointer;
-}
-
-.toggle-btn.enabled {
-  background-color: #28a745;
-  color: white;
-}
-
-.toggle-btn.disabled {
-  background-color: #dc3545;
-  color: white;
-}
-
-.export-btn {
-  background-color: #17a2b8;
-  color: white;
-}
-
-.danger-btn {
-  background-color: #dc3545;
-  color: white;
-}
-
-.reset-btn {
-  background-color: #ffc107;
-  color: #000;
-}
 
 .users-table {
   overflow-x: auto;
@@ -537,7 +334,7 @@ export default {
 .users-table th,
 .users-table td {
   padding: 0.5rem;
-  border: 1px solid #ddd;
+  border: 1px solid #ccc;
   text-align: left;
 }
 
@@ -548,7 +345,6 @@ export default {
 
 .role-badge {
   padding: 0.25rem 0.5rem;
-  border-radius: 4px;
   font-size: 0.8rem;
 }
 
@@ -562,72 +358,9 @@ export default {
   color: white;
 }
 
-.form-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-
-.form-group {
-  margin-bottom: 1rem;
-}
-
-.form-group label {
-  display: block;
-  margin-bottom: 0.5rem;
-  font-weight: bold;
-}
-
-.form-group input,
-.form-group textarea {
-  width: 100%;
-  padding: 0.5rem;
-  border: 1px solid #ccc;
-}
-
-.send-btn {
-  background-color: #28a745;
-  color: white;
-  border: none;
-  padding: 0.5rem 1rem;
-  cursor: pointer;
-}
-
-.send-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.email-status {
-  padding: 0.5rem;
-  margin-bottom: 1rem;
-  text-align: center;
-}
-
-.email-status.success {
-  background-color: #d4edda;
-  color: #155724;
-  border: 1px solid #c3e6cb;
-}
-
-.email-status.error {
-  background-color: #f8d7da;
-  color: #721c24;
-  border: 1px solid #f5c6cb;
-}
-
 @media (max-width: 768px) {
-  .form-row {
-    grid-template-columns: 1fr;
-  }
-  
-  .admin-controls {
-    flex-direction: column;
-  }
-  
   .user-stats {
-    grid-template-columns: 1fr;
+    flex-direction: column;
   }
 }
 </style>

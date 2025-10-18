@@ -131,10 +131,9 @@
                   ⭐
                 </span>
               </div>
-              <span class="rating-text">
-                Average: {{ getAverageRating(selectedResourceForRating).toFixed(1) }} 
-                ({{ getRatingCount(selectedResourceForRating) }} ratings)
-              </span>
+              <button class="submit-rating-btn" style="background:#6c757d" @click="refreshAverageFromCloud" :disabled="isLoadingAverage">
+                {{ isLoadingAverage ? 'Loading...' : `Average: ${averageFromCloud.toFixed(1)} (${countFromCloud} ratings)` }}
+              </button>
             </div>
             
             <!-- your rating display -->
@@ -175,6 +174,23 @@
           <div v-else class="login-prompt">
             <p>Please <router-link to="/login">login</router-link> to rate resources</p>
           </div>
+
+          <!-- check reviews list for current resource (always visible) -->
+          <div class="check-reviews" style="margin-top:1rem; text-align:center;">
+            <button class="submit-rating-btn" @click="checkReviews" :disabled="!selectedResourceForRating || isLoadingReviews">
+              {{ isLoadingReviews ? 'Loading...' : 'Check Reviews' }}
+            </button>
+          </div>
+          <div v-if="reviewItems.length" class="reviews-list" style="margin-top:1rem;">
+            <h3 style="margin-bottom:0.5rem;">Reviews</h3>
+            <ul style="list-style: none; padding: 0; margin: 0;">
+              <li v-for="(rv, idx) in reviewItems" :key="idx" style="border-bottom:1px solid #eee; padding:0.5rem 0; display:flex; justify-content:space-between; gap:1rem;">
+                <span><strong>User:</strong> {{ rv.userShort }}</span>
+                <span><strong>Rating:</strong> {{ rv.rating }}</span>
+                <span v-if="rv.time"><strong>Time:</strong> {{ rv.time }}</span>
+              </li>
+            </ul>
+          </div>
         </div>
         
         <!-- prompt when no resource is selected -->
@@ -187,13 +203,13 @@
 </template>
 
 <script>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import mentalHealthData from '../data/mentalHealthData.json'
 import { authService as localAuth } from '../services/auth'
 import { firebaseAuthService } from '../services/firebaseAuth'
 import { exportService } from '../services/exportService'
 import { sanitizeInput, validateAndSanitize, getSafeErrorMessage } from '../utils/security'
-import reviewService from '../services/reviewService'
+import reviewService, { fetchReviews, getStats } from '../services/reviewService'
 
 // home page component with dynamic data and role-based features
 export default {
@@ -216,6 +232,12 @@ export default {
     // selected resource for rating and current rating input
     const selectedResourceForRating = ref(null)
     const currentRating = ref(0)
+    // simple reviews list state
+    const reviewItems = ref([])
+    const isLoadingReviews = ref(false)
+    const averageFromCloud = ref(0)
+    const countFromCloud = ref(0)
+    const isLoadingAverage = ref(false)
     
     // force refresh trigger for rating display
     const ratingRefreshTrigger = ref(0)
@@ -514,10 +536,10 @@ export default {
         // reset and refresh
         currentRating.value = 0
         ratings.value = { ...ratings.value }
-        setTimeout(() => {
-          ratings.value = { ...ratings.value }
-          ratingRefreshTrigger.value++
-        }, 100)
+        // also refresh remote list and average so numbers match what you see
+        await Promise.all([checkReviews(), refreshAverageFromCloud()])
+        ratings.value = { ...ratings.value }
+        ratingRefreshTrigger.value++
 
         alert(`Rating saved. Avg: ${average.toFixed(1)} (${count})`)
       } catch (e) {
@@ -525,15 +547,82 @@ export default {
         alert(getSafeErrorMessage(e))
       }
     }
+
+    /**
+     * checkReviews
+     * load all reviews for the selected resource from cloud function
+     * keep list in a tiny array for simple viewing
+     */
+    const checkReviews = async () => {
+      try {
+        if (!selectedResourceForRating.value) return
+        isLoadingReviews.value = true
+        // call HTTP function and store items
+        const data = await fetchReviews(selectedResourceForRating.value)
+        reviewItems.value = data.reviews || []
+      } catch (e) {
+        console.error('checkReviews error', e)
+        alert(getSafeErrorMessage(e))
+      } finally {
+        isLoadingReviews.value = false
+      }
+    }
+
+    /**
+     * refreshAverageFromCloud
+     * call getStats to fetch avg and count for selected resource
+     */
+    const refreshAverageFromCloud = async () => {
+      try {
+        if (!selectedResourceForRating.value) return
+        isLoadingAverage.value = true
+        const { average, count } = await getStats(selectedResourceForRating.value)
+        averageFromCloud.value = Number(average || 0)
+        countFromCloud.value = Number(count || 0)
+      } catch (e) {
+        console.error('getStats error', e)
+      } finally {
+        isLoadingAverage.value = false
+      }
+    }
+
+    // auto refresh stats when resource selection changes
+    watch(selectedResourceForRating, async (val) => {
+      if (val) {
+        await Promise.all([refreshAverageFromCloud(), checkReviews()])
+      } else {
+        averageFromCloud.value = 0
+        countFromCloud.value = 0
+        reviewItems.value = []
+      }
+    })
     
     onMounted(() => {
       loadData()
+      // initial average fetch when resource selected later
     })
     
     // unify auth: prefer Firebase user, fallback to local auth
+    // make it reactive so UI updates right away after login/logout
+    const currentFirebaseUser = ref(firebaseAuthService.getCurrentUser() || null)
+    let unsubscribeAuth = null
+    onMounted(() => {
+      unsubscribeAuth = firebaseAuthService.onAuthStateChanged((u) => {
+        currentFirebaseUser.value = u || null
+      })
+      // also listen custom app event for safety
+      const handler = () => { currentFirebaseUser.value = firebaseAuthService.getCurrentUser() || null }
+      window.addEventListener('authStateChanged', handler)
+      // store for cleanup
+      onUnmounted(() => {
+        if (unsubscribeAuth) unsubscribeAuth()
+        window.removeEventListener('authStateChanged', handler)
+      })
+    })
+
     const unifiedAuth = {
-      isLoggedIn: () => !!firebaseAuthService.getCurrentUser() || localAuth.isLoggedIn(),
-      getCurrentUser: () => firebaseAuthService.getCurrentUser() || localAuth.getCurrentUser(),
+      isLoggedIn: () => !!currentFirebaseUser.value || localAuth.isLoggedIn(),
+      getCurrentUser: () => currentFirebaseUser.value || localAuth.getCurrentUser(),
       isAdmin: () => localAuth.isAdmin(),
     }
     const authService = unifiedAuth
@@ -562,7 +651,16 @@ export default {
       exportResourcesCSV,
       exportResourcesPDF,
       setCurrentRating,
-      submitRating
+      submitRating,
+      // reviews list expose
+      reviewItems,
+      isLoadingReviews,
+      checkReviews,
+      // cloud average expose
+      averageFromCloud,
+      countFromCloud,
+      isLoadingAverage,
+      refreshAverageFromCloud
     }
   }
 }

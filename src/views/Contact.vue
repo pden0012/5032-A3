@@ -53,12 +53,19 @@
           
           <div class="file-input">
             <label for="attachment">Attachment (optional):</label>
-            <input 
-              type="file" 
-              id="attachment" 
-              ref="fileInput"
-              @change="handleFileSelect" 
-            />
+            <!-- custom file input with English UI -->
+            <div class="custom-file" role="group" aria-label="File upload">
+              <input 
+                type="file" 
+                id="attachment" 
+                ref="fileInput"
+                class="visually-hidden"
+                @change="handleFileSelect" 
+                aria-label="Choose a file to upload"
+              />
+              <label for="attachment" class="choose-file-btn">Choose File</label>
+              <span class="file-name" aria-live="polite">{{ selectedFileName }}</span>
+            </div>
           </div>
           
           <button type="submit" :disabled="isSending" class="submit-btn">
@@ -88,6 +95,7 @@ export default {
     const isSending = ref(false)
     const statusMessage = ref(null)
     const fileInput = ref(null)
+    const selectedFileName = ref('No file chosen')
     
     /**
      * Handle file selection and convert to attachment format.
@@ -100,9 +108,13 @@ export default {
       if (file) {
         try {
           contactForm.value.attachment = await emailService.fileToAttachment(file)
+          // show chosen file name (english ui)
+          selectedFileName.value = file.name
         } catch (error) {
           statusMessage.value = { success: false, text: 'Failed to process file' }
         }
+      } else {
+        selectedFileName.value = 'No file chosen'
       }
     }
     
@@ -135,6 +147,7 @@ export default {
           if (fileInput.value) {
             fileInput.value.value = ''
           }
+          selectedFileName.value = 'No file chosen'
         } else {
           statusMessage.value = { success: false, text: 'Failed to send message' }
         }
@@ -151,6 +164,7 @@ export default {
       statusMessage,
       fileInput,
       handleFileSelect,
+      selectedFileName,
       sendMessage
     }
   }
@@ -200,10 +214,34 @@ export default {
   font-weight: bold;
 }
 
-.file-input input[type="file"] {
-  width: 100%;
-  padding: 0.5rem;
-  border: 1px solid #ccc;
+/* visually hide the native input, keep accessible */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.custom-file {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.choose-file-btn {
+  background-color: #6c757d;
+  color: #fff;
+  padding: 0.4rem 0.8rem;
+  cursor: pointer;
+}
+
+.file-name {
+  color: #333;
 }
 
 .submit-btn {

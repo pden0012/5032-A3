@@ -7,13 +7,13 @@
       <div class="search-section">
         <input 
           v-model="searchQuery" 
-          @keyup.enter="searchPlacesOfInterest"
+          @keyup.enter="searchByTextGoogle"
           placeholder="Search places of interest..."
           class="search-input"
           aria-label="Search for places of interest"
           aria-describedby="search-instructions"
         />
-        <button @click="searchPlacesOfInterest" class="search-btn" aria-label="Search for the entered location">
+        <button @click="searchByTextGoogle" class="search-btn" aria-label="Search for the entered location">
           Search
         </button>
       </div>
@@ -21,7 +21,10 @@
         <button @click="getCurrentLocation" class="control-btn location-btn" aria-label="Get my current location">
           My Location
         </button>
-        <button @click="navigateBetweenPlaces" class="control-btn navigate-btn" aria-label="Show navigation routes between markers">
+        <button @click="searchNearbyHospitalsGoogle" class="control-btn" aria-label="Find nearby mental health support">
+          Support
+        </button>
+        <button @click="navigateLastTwoGoogle" class="control-btn navigate-btn" aria-label="Show navigation routes between markers">
           Navigate
         </button>
         <button @click="clearMarkers" class="control-btn clear-btn" aria-label="Clear all markers and routes">
@@ -38,15 +41,12 @@
     <!-- mapbox map container -->
     <div id="map" class="map"></div>
     
-    <!-- markers list showing coordinates and remove options -->
-    <div v-if="markers.length > 0" class="markers-list">
-      <h2>Markers ({{ markers.length }})</h2>
-      <div v-for="(marker, index) in markers" :key="index" class="marker-item">
-        <span class="marker-number">{{ index + 1 }}</span>
-        <span class="marker-coords">
-          {{ marker.lng.toFixed(4) }}, {{ marker.lat.toFixed(4) }}
-        </span>
-        <button @click="removeMarker(index)" class="remove-btn">Remove</button>
+    <!-- route info display -->
+    <div v-if="routeInfo" class="route-info">
+      <div class="route-details">
+        <span class="mode">Mode: {{ routeInfo.mode }}</span>
+        <span class="distance">Distance: {{ routeInfo.distance }}</span>
+        <span class="duration">Time: {{ routeInfo.duration }}</span>
       </div>
     </div>
     
@@ -71,16 +71,27 @@ import '@mapbox/mapbox-gl-geocoder/dist/mapbox-gl-geocoder.css'
 
 // mapbox public token for development and testing
 const MAPBOX_TOKEN = 'pk.eyJ1IjoiZGF2aWQxMjMzMzQ1NiIsImEiOiJjbTJyYmV6aTExZWczMmtweW1yM2VhcWhwIn0.D2mLsX9srM4Yg789Cmbfyg'
+// google maps api key (provided by user)
+const GOOGLE_MAPS_API_KEY = 'AIzaSyALzSmKQMmeW3Tm0TRm_5kqTyPA99DPGAA'
 
 export default {
   name: 'Map',
   setup() {
     const map = ref(null)
-    const markers = ref([])
-    const mapMarkers = ref([])
+    const markers = ref([]) // user and poi markers data
+    const mapMarkers = ref([]) // mapbox marker instances
+    const poiMarkers = ref([]) // separate list for hospital/clinic markers
     const searchQuery = ref('')
     const geocoder = ref(null)
     const routeLines = ref([])
+    const routesInfo = ref([])
+    const routeInfo = ref(null) // current route distance and time
+    // google maps state
+    const googleReady = ref(false)
+    let gMap = null
+    let gPlaces = null
+    let gDirectionsService = null
+    let gDirectionsRenderer = null
     const navigationMode = ref(false)
     
     /**
@@ -132,8 +143,10 @@ export default {
       })
       
       // add click handler to create markers on map click
-      map.value.on('click', (e) => {
+      map.value.on('click', async (e) => {
         addMarker(e.lngLat.lng, e.lngLat.lat)
+        // after user drops a point, auto search nearby hospitals/clinics
+        await showNearbyHealthcare(e.lngLat.lng, e.lngLat.lat)
       })
       
       // add navigation controls for zoom and pan
@@ -169,6 +182,153 @@ export default {
         document.getElementById('map').innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;background:#f8f9fa;color:#333;"><div><h2>Map Loading...</h2><p>If map doesn\'t appear, try refreshing the page</p></div></div>'
       })
     }
+
+    /**
+     * load google maps script then init
+     */
+    const loadGoogleMaps = () => {
+      return new Promise((resolve, reject) => {
+        if (window.google && window.google.maps) {
+          resolve()
+          return
+        }
+        const script = document.createElement('script')
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places&v=weekly`
+        script.async = true
+        script.defer = true
+        script.onload = () => resolve()
+        script.onerror = reject
+        document.head.appendChild(script)
+      })
+    }
+
+    /**
+     * init google map and services
+     */
+    const initGoogleMap = () => {
+      try {
+        const center = { lat: -37.8136, lng: 144.9631 }
+        gMap = new window.google.maps.Map(document.getElementById('map'), { center, zoom: 13 })
+        gPlaces = new window.google.maps.places.PlacesService(gMap)
+        gDirectionsService = new window.google.maps.DirectionsService()
+        gDirectionsRenderer = new window.google.maps.DirectionsRenderer({ suppressMarkers: true })
+        gDirectionsRenderer.setMap(gMap)
+        // click to add marker and auto load nearby healthcare
+        gMap.addListener('click', async (e) => {
+          addGMarker(e.latLng.lng(), e.latLng.lat(), 'Point', 'user')
+          await nearbyHealthcareGoogle(e.latLng)
+        })
+        googleReady.value = true
+      } catch (e) {
+        console.error('initGoogleMap error', e)
+      }
+    }
+
+    const addGMarker = (lng, lat, title, kind='user') => {
+      const pos = { lat, lng }
+      const m = new window.google.maps.Marker({ position: pos, map: gMap, label: kind === 'poi' ? 'H' : undefined, title })
+      mapMarkers.value.push({ remove: () => m.setMap(null) })
+      markers.value.push({ lng, lat, title, kind })
+      if (kind === 'poi') poiMarkers.value.push({ remove: () => m.setMap(null) })
+      if (title) {
+        const infowindow = new window.google.maps.InfoWindow({ content: `<div style=\"font-size:12px\"><div><strong>${title}</strong></div><div style=\"margin-top:6px;display:flex;gap:6px\"><button id=\"nav-btn\" style=\"padding:4px 8px;background:#28a745;color:#fff;border:none;cursor:pointer\">Navigate</button><button id=\"nearby-btn\" style=\"padding:4px 8px;background:#007bff;color:#fff;border:none;cursor:pointer\">Nearby</button></div></div>` })
+        m.addListener('click', () => {
+          infowindow.open({ anchor: m, map: gMap })
+          setTimeout(() => {
+            const btn = document.getElementById('nav-btn')
+            if (btn) btn.onclick = () => navigateToNearestUser({ lng, lat })
+            const near = document.getElementById('nearby-btn')
+            if (near) near.onclick = () => nearbyHealthcareGoogle(new window.google.maps.LatLng(lat, lng))
+          }, 0)
+        })
+      }
+    }
+
+    const nearbyHealthcareGoogle = (latLng) => {
+      return new Promise((resolve) => {
+        // Use new Places API instead of deprecated nearbySearch
+        if (window.google.maps.places.Place) {
+          const request = {
+            location: latLng,
+            radius: 4000,
+            keyword: 'mental health hospital clinic medical center counseling therapy support helpline crisis intervention',
+            type: ['hospital', 'health']
+          }
+          
+          // Try using the new Places API
+          try {
+            window.google.maps.places.Place.searchNearby(request).then((results) => {
+              if (results && results.length > 0) {
+                results.slice(0, 8).forEach(r => {
+                  if (r.location) {
+                    addGMarker(r.location.lng(), r.location.lat(), r.displayName || 'Hospital', 'poi')
+                  }
+                })
+              }
+              resolve()
+            }).catch(() => {
+              // Fallback: use text search if nearby search fails
+              searchHealthcareByText(latLng).then(resolve)
+            })
+          } catch (error) {
+            console.warn('New Places API not available, using fallback')
+            searchHealthcareByText(latLng).then(resolve)
+          }
+        } else {
+          // Fallback: use text search
+          searchHealthcareByText(latLng).then(resolve)
+        }
+      })
+    }
+
+    const searchHealthcareByText = (latLng) => {
+      return new Promise((resolve) => {
+        const request = {
+          query: 'mental health hospital clinic medical center counseling therapy support helpline crisis intervention',
+          location: latLng,
+          radius: 4000
+        }
+        
+        gPlaces.textSearch(request, (results, status) => {
+          if (status === window.google.maps.places.PlacesServiceStatus.OK && results) {
+            results.slice(0, 8).forEach(r => addGMarker(r.geometry.location.lng(), r.geometry.location.lat(), r.name, 'poi'))
+          }
+          resolve()
+        })
+      })
+    }
+
+    // Support button: search around current map center for mental health services (Google Places)
+    const searchNearbyHospitalsGoogle = () => {
+      if (!googleReady.value || !gMap) return
+      const center = gMap.getCenter()
+      nearbyHealthcareGoogle(center)
+    }
+
+    const drawSingleRouteGoogle = async (start, end) => {
+      const mode = window.google.maps.TravelMode.DRIVING // changed to driving per request
+      gDirectionsService.route({ 
+        origin: { lat: start.lat, lng: start.lng }, 
+        destination: { lat: end.lat, lng: end.lng }, 
+        travelMode: mode,
+        language: 'en' // force English language
+      }, (res, status) => {
+        if (status === window.google.maps.DirectionsStatus.OK) {
+          gDirectionsRenderer.setDirections(res)
+          const leg = res.routes[0].legs[0]
+          // format distance and time for display in English
+          const distance = leg.distance.text
+          const duration = leg.duration.text
+          const travelMode = mode === window.google.maps.TravelMode.WALKING ? 'Walking' : 'Driving'
+          routeInfo.value = { mode: travelMode, distance, duration }
+          routesInfo.value = []
+          routesInfo.value.push({ distance: leg.distance.value, duration: leg.duration.value })
+        } else {
+          console.warn('Directions failed', status)
+          routeInfo.value = null
+        }
+      })
+    }
     
     /**
      * add new marker to map and update marker collections
@@ -176,14 +336,14 @@ export default {
      * adjusts map view to fit all markers when multiple exist
      * supports custom titles for places of interest
      */
-    const addMarker = (lng, lat, title = null) => {
-      const markerData = { lng, lat, title: title || `Marker ${markers.value.length + 1}` } // create marker data
+    const addMarker = (lng, lat, title = null, kind = 'user') => {
+      const markerData = { lng, lat, title: title || `Marker ${markers.value.length + 1}`, kind } // create marker data
       markers.value.push(markerData) // add to marker array
       
       // create numbered marker element
       const el = document.createElement('div')
-      el.className = 'custom-marker'
-      el.innerHTML = markers.value.length.toString() // show marker number
+      el.className = kind === 'poi' ? 'poi-marker' : 'custom-marker'
+      el.innerHTML = kind === 'poi' ? 'H' : markers.value.length.toString()
       
       // add marker to map
       const marker = new mapboxgl.Marker(el)
@@ -192,14 +352,85 @@ export default {
       
       // add popup if title exists
       if (title) {
-        marker.setPopup(new mapboxgl.Popup().setText(title)) // set popup content
+        const popupEl = document.createElement('div')
+        popupEl.innerHTML = `<div style="font-size:12px"><div><strong>${title}</strong></div><button id="nav-btn" style="margin-top:6px;padding:4px 8px;background:#28a745;color:#fff;border:none;cursor:pointer">Navigate</button></div>`
+        const popup = new mapboxgl.Popup().setDOMContent(popupEl)
+        marker.setPopup(popup)
+        // when user clicks navigate on a POI, draw single route from last user marker
+        popup.on('open', () => {
+          const btn = popupEl.querySelector('#nav-btn')
+          if (btn) {
+            btn.addEventListener('click', () => {
+              navigateToNearestUser({ lng, lat })
+            })
+          }
+        })
       }
       
       mapMarkers.value.push(marker) // add to marker instance array
+      if (kind === 'poi') {
+        poiMarkers.value.push(marker)
+      }
       
       // adjust map view if multiple markers exist
       if (markers.value.length > 1) {
         fitMapToMarkers() // fit all markers
+      }
+    }
+
+    /**
+     * searchByTextGoogle
+     * use Places text search to move map to result and then load nearby hospitals
+     */
+    const searchByTextGoogle = () => {
+      try {
+        if (!searchQuery.value || !googleReady.value || !gMap) return
+        const request = { query: searchQuery.value, fields: ['name', 'geometry'] }
+        const service = new window.google.maps.places.PlacesService(gMap)
+        service.findPlaceFromQuery(request, (results, status) => {
+          if (status === window.google.maps.places.PlacesServiceStatus.OK && results && results[0]) {
+            const r = results[0]
+            const loc = r.geometry.location
+            gMap.setCenter(loc)
+            addGMarker(loc.lng(), loc.lat(), r.name || searchQuery.value, 'poi')
+            nearbyHealthcareGoogle(loc)
+          }
+        })
+      } catch (e) { console.error('searchByTextGoogle error', e) }
+    }
+
+    /**
+     * find nearest user marker (non-poi); draw route from that to dest
+     */
+    const navigateToNearestUser = async (dest) => {
+      let origin = null
+      try {
+        const userPoints = markers.value.filter(m => m.kind !== 'poi')
+        if (userPoints.length === 0) {
+          // no origin yet: try current location as start
+          await new Promise((resolve, reject) => {
+            if (!navigator.geolocation) return reject(new Error('geo not supported'))
+            navigator.geolocation.getCurrentPosition((pos) => {
+              if (googleReady.value && gMap) {
+                addGMarker(pos.coords.longitude, pos.coords.latitude, 'Me', 'user')
+              } else {
+                addMarker(pos.coords.longitude, pos.coords.latitude, 'Me', 'user')
+              }
+              resolve()
+            }, reject, { enableHighAccuracy: true, timeout: 8000, maximumAge: 120000 })
+          })
+          origin = markers.value.filter(m => m.kind !== 'poi').slice(-1)[0]
+        } else {
+          origin = userPoints[userPoints.length - 1]
+        }
+        if (!origin) return
+        if (googleReady.value) {
+          await drawSingleRouteGoogle(origin, dest)
+        } else {
+          await drawSingleRoute(origin, dest)
+        }
+      } catch (e) {
+        console.error('navigateToNearestUser error', e)
       }
     }
     
@@ -228,9 +459,13 @@ export default {
      * resets marker count and map view to initial state
      */
     const clearMarkers = () => {
+      // remove all marker instances
       mapMarkers.value.forEach(marker => marker.remove())
-      
-      // clear route lines
+      poiMarkers.value.forEach(marker => marker.remove())
+      mapMarkers.value = []
+      poiMarkers.value = []
+
+      // clear route lines and info
       routeLines.value.forEach(line => {
         if (map.value.getSource(line.id)) {
           map.value.removeLayer(line.id)
@@ -238,16 +473,17 @@ export default {
         }
       })
       routeLines.value = []
-      
-      mapMarkers.value = []
+      routesInfo.value = []
+      routeInfo.value = null // clear route info display
+
+      // reset data arrays
       markers.value = []
       navigationMode.value = false
-      
+
       // reset map view to default
-      map.value.flyTo({
-        center: [144.9631, -37.8136], // Melbourne coordinates
-        zoom: 10
-      })
+      if (map.value) {
+        map.value.flyTo({ center: [144.9631, -37.8136], zoom: 10 })
+      }
     }
     
     /**
@@ -264,6 +500,7 @@ export default {
       
       try {
         // clear previous routes first
+        routesInfo.value = []
         routeLines.value.forEach(line => {
           if (map.value.getSource(line.id)) {
             map.value.removeLayer(line.id) // remove route layer
@@ -319,6 +556,7 @@ export default {
               distance: route.distance, // distance in meters
               duration: route.duration // time in seconds
             })
+            routesInfo.value.push({ distance: route.distance, duration: route.duration })
           }
         }
         
@@ -332,6 +570,92 @@ export default {
       } catch (error) {
         console.error('Navigation error:', error)
         alert('Failed to draw route, try again') // error message
+      }
+    }
+
+    // google version: draw route between last two points
+    const navigateLastTwoGoogle = async () => {
+      const userPoints = markers.value.filter(m => m.kind !== 'poi')
+      const poiPoints = markers.value.filter(m => m.kind === 'poi')
+      
+      if (userPoints.length === 0 && poiPoints.length === 0) {
+        alert('Please add at least one marker or search for places first')
+        return
+      }
+      
+      // If only one user point, try to use current location as second point
+      if (userPoints.length === 1 && poiPoints.length === 0) {
+        try {
+          await new Promise((resolve, reject) => {
+            if (!navigator.geolocation) return reject(new Error('geo not supported'))
+            navigator.geolocation.getCurrentPosition((pos) => {
+              if (googleReady.value && gMap) {
+                addGMarker(pos.coords.longitude, pos.coords.latitude, 'My Location', 'user')
+              } else {
+                addMarker(pos.coords.longitude, pos.coords.latitude, 'My Location', 'user')
+              }
+              resolve()
+            }, reject, { enableHighAccuracy: true, timeout: 8000, maximumAge: 120000 })
+          })
+        } catch (e) {
+          console.warn('Could not get current location:', e)
+          alert('Need at least 2 markers to draw route, or enable location services')
+          return
+        }
+      }
+      
+      // Now try to find two points for navigation
+      const updatedUserPoints = markers.value.filter(m => m.kind !== 'poi')
+      const updatedPoiPoints = markers.value.filter(m => m.kind === 'poi')
+      
+      if (updatedUserPoints.length >= 2) {
+        // Navigate between last two user points
+        const a = updatedUserPoints[updatedUserPoints.length - 2]
+        const b = updatedUserPoints[updatedUserPoints.length - 1]
+        if (googleReady.value) await drawSingleRouteGoogle(a, b)
+      } else if (updatedUserPoints.length === 1 && updatedPoiPoints.length >= 1) {
+        // Navigate from user point to nearest POI
+        const userPoint = updatedUserPoints[0]
+        const nearestPOI = updatedPoiPoints[0]
+        if (googleReady.value) await drawSingleRouteGoogle(userPoint, nearestPOI)
+      } else {
+        alert('Need at least 2 markers to draw route')
+      }
+    }
+
+    /**
+     * drawSingleRoute
+     * build one route between origin and dest, replace previous route
+     */
+    const drawSingleRoute = async (start, end) => {
+      try {
+        // clear previous
+        routesInfo.value = []
+        routeLines.value.forEach(line => {
+          if (map.value.getSource(line.id)) {
+            map.value.removeLayer(line.id)
+            map.value.removeSource(line.id)
+          }
+        })
+        routeLines.value = []
+        const profile = travelMode.value === 'walking' ? 'walking' : 'driving'
+        const response = await fetch(`https://api.mapbox.com/directions/v5/mapbox/${profile}/${start.lng},${start.lat};${end.lng},${end.lat}?geometries=geojson&access_token=${MAPBOX_TOKEN}`)
+        const data = await response.json()
+        if (data.routes && data.routes.length > 0) {
+          const route = data.routes[0]
+          const routeId = 'route-single'
+          map.value.addSource(routeId, { type: 'geojson', data: { type: 'Feature', properties: {}, geometry: route.geometry } })
+          map.value.addLayer({ id: routeId, type: 'line', source: routeId, layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#ff7f0e', 'line-width': 4, 'line-opacity': 0.85 } })
+          routeLines.value.push({ id: routeId, distance: route.distance, duration: route.duration })
+          routesInfo.value.push({ distance: route.distance, duration: route.duration })
+          const bounds = new mapboxgl.LngLatBounds()
+          bounds.extend([start.lng, start.lat])
+          bounds.extend([end.lng, end.lat])
+          map.value.fitBounds(bounds, { padding: 50 })
+        }
+      } catch (e) {
+        console.error('drawSingleRoute error', e)
+        alert('Failed to draw route')
       }
     }
     
@@ -419,6 +743,171 @@ export default {
         alert('Search failed, try again') // error message
       }
     }
+
+    /**
+     * searchNearbyHospitals
+     * find hospitals near current center (or Melbourne default) and add top 3 markers
+     */
+    const searchNearbyHospitals = async () => {
+      try {
+        const center = map.value ? map.value.getCenter() : { lng: 144.9631, lat: -37.8136 }
+        // try 1: categories filter (preferred for POI)
+        let url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent('hospital')}.json?access_token=${MAPBOX_TOKEN}&types=poi&categories=hospital,clinic,doctor,medical,pharmacy&limit=5&proximity=${center.lng},${center.lat}&country=AU`
+        let res = await fetch(url)
+        let data = await res.json()
+        // try 2: keyword fallback with larger limit
+        if (!data.features || data.features.length === 0) {
+          url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent('hospital clinic medical center')}.json?access_token=${MAPBOX_TOKEN}&types=poi&limit=8&proximity=${center.lng},${center.lat}&country=AU`
+          res = await fetch(url)
+          data = await res.json()
+        }
+        // try 3: bbox within current map bounds
+        if ((!data.features || data.features.length === 0) && map.value) {
+          const b = map.value.getBounds()
+          const bbox = `${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`
+          url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent('hospital')}.json?access_token=${MAPBOX_TOKEN}&types=poi&categories=hospital,clinic,doctor&limit=8&bbox=${bbox}&country=AU`
+          res = await fetch(url)
+          data = await res.json()
+        }
+
+        if (data.features && data.features.length) {
+          data.features.forEach((f) => addMarker(f.center[0], f.center[1], f.text || f.place_name, 'poi'))
+          map.value.flyTo({ center: [data.features[0].center[0], data.features[0].center[1]], zoom: 13 })
+        } else {
+          // final fallback: Overpass (OpenStreetMap) within 3km radius
+          const over = await fetchHospitalsFromOverpass(center.lng, center.lat)
+          if (over.length) {
+            over.forEach(p => addMarker(p.lng, p.lat, p.name || 'Hospital/Clinic', 'poi'))
+            map.value.flyTo({ center: [over[0].lng, over[0].lat], zoom: 13 })
+          } else {
+            alert('No nearby hospitals found')
+          }
+        }
+      } catch (e) {
+        console.error('Hospital search error', e)
+        alert('Failed to search hospitals')
+      }
+    }
+
+    /**
+     * showNearbyHealthcare
+     * auto search clinics/hospitals around a clicked point
+     */
+    const showNearbyHealthcare = async (lng, lat) => {
+      try {
+        // remove previous POI markers
+        poiMarkers.value.forEach(m => m.remove && m.remove())
+        poiMarkers.value = []
+        // try 1: categories near clicked point
+        let url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent('hospital')}.json?access_token=${MAPBOX_TOKEN}&types=poi&categories=hospital,clinic,doctor,medical&limit=5&proximity=${lng},${lat}&country=AU`
+        let res = await fetch(url)
+        let data = await res.json()
+        // try 2: keyword fallback
+        if (!data.features || data.features.length === 0) {
+          url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent('hospital clinic medical center')}.json?access_token=${MAPBOX_TOKEN}&types=poi&limit=8&proximity=${lng},${lat}&country=AU`
+          res = await fetch(url)
+          data = await res.json()
+        }
+        if (data.features && data.features.length) {
+          data.features.forEach((f) => addMarker(f.center[0], f.center[1], f.text || f.place_name, 'poi'))
+        } else {
+          const over = await fetchHospitalsFromOverpass(lng, lat)
+          over.forEach(p => addMarker(p.lng, p.lat, p.name || 'Hospital/Clinic', 'poi'))
+        }
+      } catch (e) { console.error('showNearbyHealthcare error', e) }
+    }
+
+    /**
+     * sosNearestHelp
+     * from current location find nearest healthcare poi and navigate
+     */
+    const sosNearestHelp = async () => {
+      try {
+        // get current location first
+        await new Promise((resolve, reject) => {
+          if (!navigator.geolocation) return reject(new Error('geolocation not supported'))
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              addMarker(pos.coords.longitude, pos.coords.latitude, 'Me', 'user')
+              resolve()
+            },
+            (err) => reject(err),
+            { enableHighAccuracy: true, timeout: 8000, maximumAge: 120000 }
+          )
+        })
+        const origin = markers.value[markers.value.length - 1]
+        // search around origin using robust pipeline
+        let list = []
+        try {
+          const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent('hospital')}.json?access_token=${MAPBOX_TOKEN}&types=poi&categories=hospital,clinic,doctor,medical&limit=5&proximity=${origin.lng},${origin.lat}&country=AU`
+          const res = await fetch(url)
+          const data = await res.json()
+          if (data.features && data.features.length) {
+            list = data.features.map(f => ({ lng: f.center[0], lat: f.center[1], name: f.text || f.place_name }))
+          }
+        } catch {}
+        if (list.length === 0) {
+          list = await fetchHospitalsFromOverpass(origin.lng, origin.lat)
+        }
+        if (list.length === 0) {
+          alert('No help points nearby, try zooming out or moving the map')
+          return
+        }
+        // choose nearest
+        list.sort((a, b) => Math.hypot(a.lng - origin.lng, a.lat - origin.lat) - Math.hypot(b.lng - origin.lng, b.lat - origin.lat))
+        const target = list[0]
+        addMarker(target.lng, target.lat, target.name || 'Help', 'poi')
+        await drawSingleRoute(origin, target)
+      } catch (e) {
+        console.error('sosNearestHelp error', e)
+        alert('Failed to find nearest help')
+      }
+    }
+
+    /**
+     * fetchHospitalsFromOverpass
+     * OpenStreetMap Overpass fallback within ~3000m
+     */
+    const fetchHospitalsFromOverpass = async (lng, lat) => {
+      const radius = 3000
+      const query = `\n[out:json];\n(\n  node["amenity"~"hospital|clinic|doctors|pharmacy"](around:${radius},${lat},${lng});\n  way["amenity"~"hospital|clinic|doctors|pharmacy"](around:${radius},${lat},${lng});\n);\nout center;\n`
+      const endpoints = [
+        'https://overpass.kumi.systems/api/interpreter',
+        'https://overpass-api.de/api/interpreter',
+        'https://overpass.openstreetmap.ru/api/interpreter'
+      ]
+      const points = []
+      for (let i = 0; i < endpoints.length; i++) {
+        try {
+          const res = await fetch(endpoints[i], {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+            body: new URLSearchParams({ data: query })
+          })
+          if (!res.ok) {
+            // 429/5xx: 退避后尝试下一个节点
+            await new Promise(r => setTimeout(r, 500 * (i + 1)))
+            continue
+          }
+          const ct = res.headers.get('content-type') || ''
+          if (!ct.includes('application/json')) { continue }
+          const json = await res.json()
+          for (const el of json.elements || []) {
+            if (el.type === 'node') {
+              points.push({ lng: el.lon, lat: el.lat, name: el.tags && el.tags.name })
+            } else if (el.type === 'way' && el.center) {
+              points.push({ lng: el.center.lon, lat: el.center.lat, name: el.tags && el.tags.name })
+            }
+          }
+          if (points.length) break
+        } catch (e) {
+          // 忽略并尝试下一个
+          await new Promise(r => setTimeout(r, 300 * (i + 1)))
+        }
+      }
+      points.sort((a,b)=> (Math.hypot(a.lng-lng, a.lat-lat) - Math.hypot(b.lng-lng, b.lat-lat)))
+      return points.slice(0,5)
+    }
     
     /**
      * get user's current location using browser geolocation api
@@ -427,31 +916,26 @@ export default {
      */
     const getCurrentLocation = () => {
       if (!navigator.geolocation) {
-        alert('Your browser doesn\'t support location feature') // browser doesn't support location
+        alert('Your browser doesn\'t support location feature')
         return
       }
-      
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          const { latitude, longitude } = position.coords // get lat/lng coordinates
-          addMarker(longitude, latitude) // add current location marker
-          
-          // smoothly fly to user location
-          map.value.flyTo({
-            center: [longitude, latitude], // set map center
-            zoom: 15, // zoom to level 15, see more clearly
-            duration: 1500 // 1.5 second animation time
-          })
+          const { latitude, longitude } = position.coords
+          if (googleReady.value && gMap) {
+            addGMarker(longitude, latitude, 'Me', 'user')
+            gMap.setCenter({ lat: latitude, lng: longitude })
+            gMap.setZoom(15)
+          } else if (map.value) {
+            addMarker(longitude, latitude)
+            map.value.flyTo({ center: [longitude, latitude], zoom: 15, duration: 1500 })
+          }
         },
         (error) => {
           console.error('Location error:', error)
-          alert('Failed to get location, check browser permissions') // location failed
+          alert('Failed to get location, check browser permissions')
         },
-        {
-          enableHighAccuracy: true, // enable high accuracy location
-          timeout: 10000, // 10 second timeout
-          maximumAge: 300000 // cache for 5 minutes
-        }
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
       )
     }
     
@@ -489,8 +973,15 @@ export default {
       }
     }
     
-    onMounted(() => {
-      initMap()
+    onMounted(async () => {
+      // try google first for better POI; fallback to mapbox if fails
+      try {
+        await loadGoogleMaps()
+        initGoogleMap()
+      } catch (e) {
+        console.warn('Google Maps load failed, fallback to Mapbox', e)
+        initMap()
+      }
     })
     
     onUnmounted(() => {
@@ -506,10 +997,21 @@ export default {
       removeMarker,
       clearMarkers,
       searchPlacesOfInterest,
+      searchByTextGoogle,
       getCurrentLocation,
       navigateBetweenPlaces,
       navigationMode,
-      routeLines
+      routeLines,
+      routesInfo,
+      routeInfo,
+      searchNearbyHospitals,
+      // google
+      drawSingleRouteGoogle,
+      searchNearbyHospitalsGoogle,
+      showNearbyHealthcare,
+      navigateLastTwoGoogle
+      // travel mode & sos
+      
     }
   }
 }
@@ -594,6 +1096,33 @@ export default {
   height: 400px;
   border: 1px solid #ccc;
   margin-bottom: 1rem;
+}
+
+/* route info display */
+.route-info {
+  margin: 1rem 0;
+  padding: 1rem;
+  background-color: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+}
+
+.route-details {
+  display: flex;
+  gap: 2rem;
+  font-weight: bold;
+}
+
+.route-details .mode {
+  color: #6c757d;
+}
+
+.route-details .distance {
+  color: #007bff;
+}
+
+.route-details .duration {
+  color: #28a745;
 }
 
 .markers-list {
